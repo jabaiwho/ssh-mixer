@@ -2,14 +2,14 @@
 
 ## Supported versions
 
-SSH-mixer has not published a production release yet. Until a release is explicitly published, security fixes are made on the repository's protected default branch and no source checkout should be treated as a signed production distribution.
-
-After production releases begin, this table must be updated before publication. Unless a release says otherwise, only the latest published version will receive security fixes.
+SSH-mixer publishes the Omarchy plugin as reviewed source and Receiver helpers as signed, attested, immutable release assets. Unless a release says otherwise, only the latest published plugin and Receiver versions receive security fixes. The protected default branch receives fixes before the next release but is not itself a stable release channel.
 
 | Version | Supported |
 | --- | --- |
-| Unreleased protected default branch | Yes |
-| Older commits and personal forks | No |
+| Plugin `0.1.0` | Yes |
+| Receiver/Companion `1.1.0` | Yes |
+| Protected default branch | Development |
+| Older releases, commits, and personal forks | No |
 
 Experimental macOS is covered by this vulnerability-reporting process, but remains `experimental: true` and `realDeviceVerified: false`; a compatibility failure is normally a bug, not automatically a vulnerability.
 

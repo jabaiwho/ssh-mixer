@@ -14,12 +14,14 @@ The source desktop is Omarchy Linux with PipeWire/PulseAudio compatibility. Tail
 
 ## Install and first run
 
-The source pins the reviewed public production signing trust root, but there is not yet a published production release. A source checkout is therefore a source/development installation, not a verified binary release. Review the exact commit and [SECURITY.md](../SECURITY.md) before enabling it.
+Plugin `v0.1.0` is reviewed source at one signed Git tag. Receiver `v1.1.0` is a separate [signed, attested, immutable production release](https://github.com/jabaiwho/ssh-mixer/releases/tag/receiver-v1.1.0), and the source pins its production metadata trust root. The plugin remains unsandboxed source rather than a binary package; review [SECURITY.md](../SECURITY.md) and pin the exact tag before enabling it.
 
 ```bash
-git clone https://github.com/jabaiwho/ssh-mixer ~/.config/omarchy/plugins/jabaiwho.ssh-mixer
+git clone --branch v0.1.0 --depth 1 \
+  https://github.com/jabaiwho/ssh-mixer \
+  ~/.config/omarchy/plugins/jabaiwho.ssh-mixer
 cd ~/.config/omarchy/plugins/jabaiwho.ssh-mixer
-git rev-parse HEAD
+test "$(git rev-parse HEAD)" = "917f812bf2c5b4a63de6b5c59f43b904600858d9"
 omarchy plugin validate ~/.config/omarchy/plugins/jabaiwho.ssh-mixer
 omarchy plugin enable jabaiwho.ssh-mixer
 ln -sf ~/.config/omarchy/plugins/jabaiwho.ssh-mixer/bin/ssh-mixer ~/.local/bin/ssh-mixer
@@ -148,13 +150,13 @@ Use **Clear diagnostics** to delete retained events immediately. **Contribute a 
 
 ## Updates
 
-Creating an update plan never installs anything. Until a signed immutable release matching the approved Trust Root exists, updates fail closed without downloading or contacting a Receiver.
+Creating an update plan never installs anything. SSH-mixer pins signed immutable Receiver release `1.1.0`; a missing, changed, invalid, or incompatible release fails closed before installation.
 
 When configured, **Check signed Receiver update** verifies the plugin-pinned metadata signature, checks current Receiver capabilities, and displays exact component, native-authentication, privilege, and rollback changes. The Managed Identity cannot update executable code. After unchanged plan-hash approval, SSH-mixer uses native OpenSSH authentication, verifies immutable URL scope, byte size, and SHA-256, retains protected Receiver backups, runs the signed Companion Setup, verifies platform, helper version, protocol compatibility, restrictions, and non-elevated runtime, then commits. Failure restores the prior helper and exact authorized-key file and reports incomplete rollback honestly. Private source staging is also verified removed.
 
 A loaded SSH agent or hardware token may complete native authentication without a password prompt. Windows administrator-authorized-key ACLs may require disclosed UAC approval. Routine update planning refuses package, SSH service, firewall, Remote Login, or dependency changes and directs the user to a separate Companion Setup plan. An active Session defers the update without stopping it.
 
-See [docs/releasing.md](releasing.md) for the maintainer process and current blockers.
+See [the release process](releasing.md) for maintainer controls, signing, provenance, rollback, and publication requirements.
 
 ## Remove a Connection or uninstall
 
