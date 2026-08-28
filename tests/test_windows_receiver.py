@@ -292,6 +292,40 @@ class WindowsSetupTest(unittest.TestCase):
 
                 self.assertEqual(rollback, {"ok": True, "complete": True})
 
+    def test_bootstrap_surfaces_bounded_structured_setup_failure(self) -> None:
+        output = "\n".join(
+            [
+                '{"schemaVersion":1,"ok":false,"code":"rolled-back"}',
+                '{"schemaVersion":1,"ok":false,"stage":"receiver.windows-setup","code":"setup-failed","message":"ffplay executable verification failed"}',
+            ]
+        )
+        connection = {"type": "direct", "host": "windows.example", "user": "listener", "port": 22}
+        staging = "C:\\Users\\listener\\AppData\\Local\\Temp\\ssh-mixer-setup-0123456789abcdef0123456789abcdef"
+        calls = 0
+
+        def runner(command: list[str], **_kwargs: object):
+            nonlocal calls
+            if command[0] == "scp":
+                return subprocess.CompletedProcess(command, 0, "", "")
+            calls += 1
+            return subprocess.CompletedProcess(command, 0, staging, "") if calls == 1 else subprocess.CompletedProcess(command, 1, output, "")
+
+        with tempfile.TemporaryDirectory() as temp:
+            public_key = Path(temp) / "id_ed25519.pub"
+            public_key.write_text("ssh-ed25519 AAAATEST ssh-mixer\n", encoding="utf-8")
+            bootstrap = WindowsBootstrap(connection, known_hosts=Path(temp) / "known_hosts", runner=runner)
+            plan = build_windows_plan(
+                {
+                    "platform": "windows", "user": "listener", "profile": "C:\\Users\\listener",
+                    "openSshVersion": "9.5.0.0", "sshdInstalled": True, "sshdRunning": True,
+                    "firewallRule": True, "ffplay": True, "winget": True,
+                    "administratorCapable": False, "elevated": False,
+                },
+                administrator_confirmed=False,
+            )
+            with self.assertRaisesRegex(ValueError, "ffplay executable verification failed"):
+                bootstrap.apply(plan, {"publicKeyPath": str(public_key)})
+
     def test_tracer_reports_structured_incomplete_rollback(self) -> None:
         calls: list[str] = []
         tracer = WindowsSetupTracer(

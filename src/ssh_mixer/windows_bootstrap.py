@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .bootstrap import LinuxBootstrap, Runner
+from .diagnostics import redact
 from .linux_setup import SetupError
 from .versions import PROTOCOL_VERSION, RECEIVER_VERSIONS
 from .windows_setup import (
@@ -27,6 +28,24 @@ WINDOWS_STAGING_RE = re.compile(
 WINDOWS_TRANSACTION_RE = re.compile(
     r"^[A-Za-z]:\\[^\r\n\"<>|]*\\ssh-mixer-windows-setup-[0-9a-f]{32}$"
 )
+
+
+def _structured_setup_failure(output: str) -> str:
+    for line in reversed(output[-65_536:].splitlines()):
+        candidate = line.strip()
+        if not candidate.startswith("{"):
+            continue
+        try:
+            payload = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if (
+            isinstance(payload, dict)
+            and payload.get("code") == "setup-failed"
+            and isinstance(payload.get("message"), str)
+        ):
+            return str(payload["message"]).strip()[-4_096:]
+    return ""
 
 
 def _encoded_powershell(script: str) -> str:
@@ -195,7 +214,16 @@ class WindowsBootstrap(LinuxBootstrap):
                 and "Rollback-Incomplete" not in applied.stdout
             )
             if applied.returncode != 0:
-                raise SetupError("Windows Companion Setup failed and rollback status was reported")
+                error = _structured_setup_failure(applied.stdout)
+                sensitive = [
+                    str(self.connection.get("host", "")),
+                    str(self.connection.get("user", "")),
+                    str(plan.get("profile", "")),
+                ]
+                detail = redact(error, sensitive) if error else "failure details were unavailable"
+                raise SetupError(
+                    f"Windows Companion Setup failed: {detail}; rollback status was reported"
+                )
             lines = [line.strip() for line in applied.stdout.splitlines() if line.strip().startswith("{")]
             result = json.loads(lines[-1]) if lines else {}
             if not isinstance(result, dict) or result.get("ok") is not True:
