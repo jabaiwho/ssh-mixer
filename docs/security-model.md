@@ -105,7 +105,7 @@ On all platforms, a Managed Identity forced command permits only Receiver Protoc
 
 ## Trust and identity decisions
 
-- **Host trust:** Unknown and changed host keys stop. The user reviews exact fingerprints before SSH-mixer writes a Trust Record. Tailscale peer verification does not silently replace OpenSSH host-key verification.
+- **Host trust:** Unknown and changed host keys stop. The user reviews exact fingerprints before SSH-mixer writes a Trust Record. Generated `known_hosts` material binds those same approved key bytes to both the validated human host token used by Sessions and the deterministic connection-scoped alias used by Companion Setup; the second alias does not accept another candidate. Tailscale peer verification does not silently replace OpenSSH host-key verification.
 - **Managed Identity:** One plugin-owned Ed25519 key is dedicated to a Receiver and accepted only through its forced Receiver Protocol entry. The default private key is unencrypted but mode `0600`; optional encryption uses native `ssh-keygen` prompts and an existing `ssh-agent`.
 - **Bootstrap Authentication:** Existing OpenSSH authentication, password prompts, key passphrases, `sudo`, UAC, or macOS approval remain in native tools. SSH-mixer does not accept or store those secrets.
 - **User-managed Identity/OpenSSH profile:** SSH-mixer cannot guarantee receiver-only permissions, does not delete the user's key, labels the weaker policy persistently, and never reports that key as revoked.

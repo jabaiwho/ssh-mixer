@@ -385,9 +385,15 @@ class TrustStore:
             except (OSError, json.JSONDecodeError) as exc:
                 raise StorageError("Trust Record is unreadable") from exc
             host_token = str(record.get("hostToken", ""))
+            scoped_alias = str(record.get("connectionId", ""))
+            aliases = [host_token] if host_token else []
+            if re.fullmatch(r"[0-9a-f]{64}", scoped_alias):
+                aliases.append(scoped_alias)
             for key in record.get("keys", []):
-                if isinstance(key, dict) and host_token:
-                    lines.append(f"{host_token} {key.get('type', '')} {key.get('key', '')}")
+                if not isinstance(key, dict):
+                    continue
+                for alias in aliases:
+                    lines.append(f"{alias} {key.get('type', '')} {key.get('key', '')}")
         secure_write_text(
             self.known_hosts_path,
             "\n".join(sorted(set(lines))) + ("\n" if lines else ""),

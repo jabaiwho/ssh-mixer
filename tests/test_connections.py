@@ -3,15 +3,18 @@ from __future__ import annotations
 import base64
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from ssh_mixer.application import MixerApplication
+from ssh_mixer.bootstrap import LinuxBootstrap
 from ssh_mixer.connections import (
     ConnectionError,
     TrustStore,
+    connection_id,
     normalize_connection,
     parse_tailscale_status,
     verify_tailscale_peer,
@@ -152,6 +155,50 @@ class ConnectionTest(unittest.TestCase):
         self.assertTrue(saved["ok"])
         self.assertFalse(rejected["ok"])
         self.assertEqual(rejected["diagnostic"]["code"], "candidate-changed")
+
+    def test_known_hosts_binds_approved_keys_to_session_and_bootstrap_aliases(self) -> None:
+        connection = normalize_connection(
+            {"type": "direct", "host": "receiver.example", "user": "listener", "port": 22}
+        )
+        approved = [host_key("receiver.example", b"approved-key")]
+
+        commands: list[list[str]] = []
+
+        def runner(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            commands.append(command)
+            output = (
+                "platform=linux\nuser=listener\nhome=/home/listener\n"
+                "command.python3=true\ncommand.ffplay=true\n"
+                "command.apt-get=false\ncommand.dnf=false\n"
+                "command.pacman=false\ncommand.zypper=false\n"
+            )
+            return subprocess.CompletedProcess(command, 0, output, "")
+
+        with tempfile.TemporaryDirectory() as temp:
+            store = TrustStore(Path(temp))
+            store.approve(connection, approved)
+            LinuxBootstrap(
+                connection,
+                known_hosts=store.known_hosts_path,
+                runner=runner,
+            ).probe()
+            rendered = [
+                line.split()
+                for line in store.known_hosts_path.read_text(encoding="utf-8").splitlines()
+            ]
+
+        requested_alias = next(
+            value.removeprefix("HostKeyAlias=")
+            for value in commands[0]
+            if value.startswith("HostKeyAlias=")
+        )
+        self.assertEqual(requested_alias, connection_id(connection))
+        self.assertEqual(
+            {parts[0] for parts in rendered},
+            {"receiver.example", requested_alias},
+        )
+        self.assertEqual(len(rendered), 2)
+        self.assertEqual({tuple(parts[1:]) for parts in rendered}, {tuple(approved[0].split()[1:])})
 
     def test_host_trust_requires_approval_and_detects_replacement(self) -> None:
         connection = normalize_connection(
