@@ -138,7 +138,7 @@ Choose one unchanged plan:
 - **Keep user-managed:** retain the user's identity path with a permanent weaker-permissions warning, replace arbitrary command state with fixed Receiver Protocol v1, and discard temporary source IDs.
 - **Start fresh:** remove legacy Receiver and source choices and return to defaults.
 
-A failure restores the prior configuration byte-for-byte and retains the `0600` backup. The backup is retired only after post-migration verification. Migration waits rather than stopping an active Session.
+A failure restores the prior configuration byte-for-byte and retains the `0600` backup. Companion Setup rollback status remains authoritative through migration; an incomplete result retains required local and Receiver cleanup rather than being presented as complete. The backup is retired only after post-migration verification. Migration waits rather than stopping an active Session.
 
 ## Diagnostics and normal failure reports
 
