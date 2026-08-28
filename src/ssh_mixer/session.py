@@ -218,6 +218,24 @@ def read_encoder_diagnostics(stream: Any) -> str:
     return output.decode("utf-8", errors="replace")
 
 
+def receiver_protocol_error(output: str) -> str:
+    """Extract one bounded structured Receiver error from SSH stderr."""
+    bounded = output[-16_384:]
+    for line in reversed(bounded.splitlines()):
+        candidate = line.strip()
+        if not candidate.startswith("{"):
+            continue
+        try:
+            payload = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict) and payload.get("ok") is False:
+            message = str(payload.get("message", "")).strip()
+            if message:
+                return message[-4_096:]
+    return ""
+
+
 def run_pactl(args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["pactl", *args],
@@ -769,7 +787,7 @@ class SessionWorker:
                 ssh_cmd,
                 stdin=ffmpeg.stdout,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
                 start_new_session=True,
             )
         except Exception:
@@ -777,6 +795,11 @@ class SessionWorker:
             kill_process_group(ffmpeg.pid, signal.SIGTERM)
             raise
         ffmpeg.stdout.close()
+        if ssh.stderr is None:
+            kill_process_group(ffmpeg.pid, signal.SIGTERM)
+            kill_process_group(ssh.pid, signal.SIGTERM)
+            raise SessionError("could not capture SSH transport diagnostics")
+        os.set_blocking(ssh.stderr.fileno(), False)
         self.children = [ffmpeg, ssh]
         self._track_process("ffmpeg", ffmpeg.pid)
         self._track_process("ssh", ssh.pid)
@@ -837,12 +860,17 @@ class SessionWorker:
         ffmpeg, ssh = self.children
         epoch = StreamEpochPolicy(started_at=time.monotonic())
         silence = StreamSilenceState()
+        ssh_diagnostics = ""
         while not self.stop_requested:
             ffmpeg_code = ffmpeg.poll()
             ssh_code = ssh.poll()
+            ssh_diagnostics = (
+                ssh_diagnostics + read_encoder_diagnostics(ssh.stderr)
+            )[-16_384:]
             if ffmpeg_code is not None or ssh_code is not None:
                 if ssh_code not in (None, 0):
-                    return int(ssh_code), f"ssh exited with status {ssh_code}", ""
+                    error = receiver_protocol_error(ssh_diagnostics)
+                    return int(ssh_code), error or f"ssh exited with status {ssh_code}", ""
                 if ffmpeg_code not in (None, 0):
                     return int(ffmpeg_code), f"ffmpeg exited with status {ffmpeg_code}", ""
                 return 0, "", ""
@@ -931,6 +959,14 @@ class SessionWorker:
                 exit_code, error = self._run_pipeline_epochs(
                     str(plan["captureSource"]), self.config.get("remote", {})
                 )
+                if error:
+                    remote = self.config.get("remote", {})
+                    sensitive = [
+                        str(remote.get("host", "")),
+                        str(remote.get("user", "")),
+                        str(remote.get("keyPath", "")),
+                    ] if isinstance(remote, dict) else []
+                    error = redact(error, sensitive)
                 if self.stop_requested:
                     exit_code = 0
                     error = ""

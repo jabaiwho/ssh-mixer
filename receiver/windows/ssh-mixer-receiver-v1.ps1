@@ -35,12 +35,23 @@ function Assert-NonElevated {
     }
 }
 
-function Resolve-FFplay {
+function Test-FFplayUsable {
     $command = Get-Command 'ffplay.exe' -CommandType Application -ErrorAction SilentlyContinue
-    if ($null -eq $command) {
-        throw 'ffplay.exe is unavailable'
+    if ($null -eq $command) { return $false }
+    try {
+        & $command.Source '-version' *> $null
+        return $LASTEXITCODE -eq 0
     }
-    return $command.Source
+    catch {
+        return $false
+    }
+}
+
+function Resolve-FFplay {
+    if (-not (Test-FFplayUsable)) {
+        throw 'ffplay.exe is unavailable or not executable'
+    }
+    return (Get-Command 'ffplay.exe' -CommandType Application).Source
 }
 
 function Parse-ReceiverOperation {
@@ -137,7 +148,7 @@ function Write-Capabilities {
         helperVersion = $HelperVersion
         platform = 'windows'
         operations = @('capabilities', 'diagnostics', 'play', 'quiet-test', 'remove')
-        ffplay = ($null -ne (Get-Command 'ffplay.exe' -CommandType Application -ErrorAction SilentlyContinue))
+        ffplay = (Test-FFplayUsable)
         runtimeElevated = $false
         quietTest = @{
             startDbfs = $QuietStartDbfs
@@ -204,7 +215,7 @@ function Write-Diagnostics {
         platform = 'windows'
         powerShell = $PSVersionTable.PSVersion.ToString()
         openSshSession = ($null -ne $env:SSH_CONNECTION)
-        ffplayAvailable = ($null -ne (Get-Command 'ffplay.exe' -CommandType Application -ErrorAction SilentlyContinue))
+        ffplayAvailable = (Test-FFplayUsable)
         runtimeElevated = $false
     } | ConvertTo-Json -Compress
 }

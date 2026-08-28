@@ -1151,7 +1151,7 @@ Item {
                   }
                 }
 
-                Button {
+                StableButton {
                   text: "×"
                   foreground: root.foreground
                   fontFamily: root.fontFamily
@@ -1258,7 +1258,7 @@ Item {
                 RowLayout {
                   width: parent.width
                   spacing: Style.space(8)
-                  Button {
+                  StableButton {
                     text: "Tailscale · Recommended"
                     foreground: root.foreground
                     fontFamily: root.fontFamily
@@ -1266,7 +1266,7 @@ Item {
                     onClicked: root.setupType = "tailscale"
                     Layout.fillWidth: true
                   }
-                  Button {
+                  StableButton {
                     text: "Direct SSH"
                     foreground: root.foreground
                     fontFamily: root.fontFamily
@@ -1274,7 +1274,7 @@ Item {
                     onClicked: { root.setupType = "direct"; root.setupPeerId = ""; root.pendingProfile = null }
                     Layout.fillWidth: true
                   }
-                  Button {
+                  StableButton {
                     text: "SSH Profile"
                     foreground: root.foreground
                     fontFamily: root.fontFamily
@@ -1286,7 +1286,7 @@ Item {
 
                 Repeater {
                   model: root.setupType === "tailscale" ? root.tailscalePeers : []
-                  Button {
+                  StableButton {
                     required property var modelData
                     width: content.width
                     text: (modelData.label || modelData.host) + (root.setupPeerId === String(modelData.id) ? "  ✓" : "")
@@ -1299,7 +1299,7 @@ Item {
 
                 Repeater {
                   model: root.setupType === "openssh-profile" ? root.openSshProfiles : []
-                  Button {
+                  StableButton {
                     required property var modelData
                     width: content.width
                     text: String(modelData) + (root.setupProfile === String(modelData) ? "  ✓" : "")
@@ -1658,7 +1658,7 @@ Item {
                 }
                 ActionButton {
                   visible: !!root.connection && root.connection.securityLevel === "receiver-only"
-                    && root.componentVersions.signedUpdateTrustConfigured
+                    && root.componentVersions.signedUpdateTrustConfigured === true
                   label: "Check signed Receiver update"
                   rowIndex: -1
                   onPressed: root.checkReceiverUpdate()
@@ -2436,7 +2436,7 @@ Item {
     }
   }
 
-  component DestinationButton: Button {
+  component DestinationButton: StableButton {
     required property string label
     required property string value
     required property int rowIndex
@@ -2445,7 +2445,6 @@ Item {
     fontFamily: root.fontFamily
     selected: root.destination === value
     hasCursor: root.cursorActive && root.focusSection === "destination" && root.focusIndex === rowIndex
-    onHovered: function(on) { if (on) { root.cursorActive = true; root.focusSection = "destination"; root.focusIndex = rowIndex } }
     onClicked: root.chooseDestination(value)
   }
 
@@ -2459,7 +2458,17 @@ Item {
     onClicked: root.savePrivacy(value, root.privacy.showReceiverLabel === true)
   }
 
-  component RetentionButton: Button {
+  component StableButton: Button {
+    color: hasCursor ? Style.hoverFillFor(foreground, accent)
+      : (selected || active) ? Style.selectedFillFor(foreground, accent)
+      : background
+    borderSpec: hasCursor ? Border.controlSpec("hover-cursor", foreground, accent)
+      : selected && Border.controlHasWidth("selected") ? Border.controlSpec("selected", foreground, accent)
+      : bordered ? Border.controlSpec("normal", foreground, accent)
+      : Border.none()
+  }
+
+  component RetentionButton: StableButton {
     required property string label
     required property string value
     text: label
@@ -2469,7 +2478,7 @@ Item {
     onClicked: root.configureDiagnosticRetention(value)
   }
 
-  component ActionButton: Button {
+  component ActionButton: StableButton {
     required property string label
     required property int rowIndex
     signal pressed()
@@ -2478,7 +2487,6 @@ Item {
     fontFamily: root.fontFamily
     selected: rowIndex === 2 && root.activeSession
     hasCursor: rowIndex >= 0 && root.cursorActive && root.focusSection === "actions" && root.focusIndex === rowIndex
-    onHovered: function(on) { if (on && rowIndex >= 0) { root.cursorActive = true; root.focusSection = "actions"; root.focusIndex = rowIndex } }
     onClicked: pressed()
   }
 }

@@ -6,10 +6,12 @@
     "Use FFplay external-clock synchronization for continuous clock correction within each bounded Stream Epoch."
   ],
   "windows/companion": [
-    "Report Companion 1.1.1 for the bounded-latency Receiver release."
+    "Report Companion 1.1.1 for the bounded-latency Receiver release.",
+    "Treat an unusable Windows application alias as missing FFplay so reviewed setup can plan the trusted per-user package."
   ],
   "windows/receiver": [
-    "Use FFplay external-clock synchronization for continuous correction within each bounded Stream Epoch."
+    "Use FFplay external-clock synchronization for continuous correction within each bounded Stream Epoch.",
+    "Reject FFplay application aliases that exist but cannot execute under the Receiver account."
   ],
   "macos/companion": [
     "Experimental: report Companion 1.1.1 for the bounded-latency Receiver release."

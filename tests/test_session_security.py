@@ -66,10 +66,33 @@ class SessionSecurityTest(unittest.TestCase):
         self.assertIs(encoder_launch.kwargs["stderr"], subprocess.PIPE)
         self.assertTrue(encoder_launch.kwargs["start_new_session"])
         self.assertIs(transport_launch.kwargs["stdout"], subprocess.DEVNULL)
-        self.assertIs(transport_launch.kwargs["stderr"], subprocess.DEVNULL)
+        self.assertIs(transport_launch.kwargs["stderr"], subprocess.PIPE)
         self.assertTrue(transport_launch.kwargs["start_new_session"])
         self.assertNotIn("shell", encoder_launch.kwargs)
         self.assertNotIn("shell", transport_launch.kwargs)
+
+    def test_transport_failure_surfaces_bounded_receiver_protocol_message(self) -> None:
+        worker = SessionWorker({}, "test-session")
+        ffmpeg = Mock(pid=10, stderr=object())
+        ffmpeg.poll.return_value = None
+        ssh = Mock(pid=11, stderr=object())
+        ssh.poll.return_value = 1
+        worker.children = [ffmpeg, ssh]
+        receiver_error = (
+            '#< CLIXML\n'
+            '{"ok":false,"message":"ffplay.exe is unavailable or not executable"}\n'
+        )
+
+        with patch(
+            "ssh_mixer.session.read_encoder_diagnostics",
+            side_effect=lambda stream: receiver_error if stream is ssh.stderr else "",
+        ):
+            result = worker._wait_for_pipeline()
+
+        self.assertEqual(
+            result,
+            (1, "ffplay.exe is unavailable or not executable", ""),
+        )
 
     def test_failed_refresh_never_records_replacement_as_complete(self) -> None:
         with tempfile.TemporaryDirectory() as temp, patch.dict(

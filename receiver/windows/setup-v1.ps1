@@ -69,6 +69,18 @@ function Get-OpenSshVersion {
     return (Get-Item -LiteralPath $sshd.Source).VersionInfo.FileVersion
 }
 
+function Test-FFplayUsable {
+    $command = Get-Command 'ffplay.exe' -CommandType Application -ErrorAction SilentlyContinue
+    if ($null -eq $command) { return $false }
+    try {
+        & $command.Source '-version' *> $null
+        return $LASTEXITCODE -eq 0
+    }
+    catch {
+        return $false
+    }
+}
+
 function Get-Probe {
     $openSshVersion = Get-OpenSshVersion
     $service = $null
@@ -88,7 +100,7 @@ function Get-Probe {
         sshdRunning = ($null -ne $service -and $service.Status -eq 'Running')
         firewallRule = ($null -ne $firewall)
         firewallPort = [string]$firewallPort
-        ffplay = ($null -ne (Get-Command 'ffplay.exe' -CommandType Application -ErrorAction SilentlyContinue))
+        ffplay = (Test-FFplayUsable)
         winget = ($null -ne (Get-Command 'winget.exe' -CommandType Application -ErrorAction SilentlyContinue))
         administratorCapable = Test-AdministratorCapable
         elevated = Test-Elevated
@@ -399,8 +411,8 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'winget FFmpeg installation failed' }
         Update-ProcessPath
     }
-    if ($null -eq (Get-Command 'ffplay.exe' -CommandType Application -ErrorAction SilentlyContinue)) {
-        throw 'ffplay.exe was not verified after package installation'
+    if (-not (Test-FFplayUsable)) {
+        throw 'ffplay.exe was not executable after package installation'
     }
 
     Copy-Item -LiteralPath $ReceiverSource -Destination $ReceiverPath -Force
