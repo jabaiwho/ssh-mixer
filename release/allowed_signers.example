@@ -1,0 +1,3 @@
+# Replace the placeholder with the dedicated release-signing public key only
+# after maintainer review. This example file is never a runtime trust root.
+ssh-mixer-release namespaces="ssh-mixer-release" ssh-ed25519 BASE64_PUBLIC_KEY_PLACEHOLDER

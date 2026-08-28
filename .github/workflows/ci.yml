@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check repository policy, manifest, docs, and secrets
+        run: python3 scripts/check_repository.py
+
+      - name: Install the trusted Ubuntu QML parser
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends qt6-declarative-dev-tools
+
+      - name: Parse QML entry points
+        run: |
+          /usr/lib/qt6/bin/qmlformat Panel.qml >/dev/null
+          /usr/lib/qt6/bin/qmlformat Indicator.qml >/dev/null
+          /usr/lib/qt6/bin/qmlformat Lifecycle.qml >/dev/null
+
+      - name: Run application and security tests
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHONPATH: src
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Check Python and JSON syntax
+        run: |
+          python3 -m compileall -q -f bin src receiver tests scripts
+          python3 -m json.tool manifest.json >/dev/null
+
+      - name: Check shell scripts
+        run: |
+          bash -n bin/cliamp-stream receiver/linux/setup-v1.sh scripts/setup_release_signing.sh
+          sh -n receiver/macos/setup-v1.sh receiver/macos/ssh-mixer-receiver-v1
+          shellcheck bin/cliamp-stream receiver/linux/setup-v1.sh scripts/setup_release_signing.sh
+          shellcheck -s sh receiver/macos/setup-v1.sh receiver/macos/ssh-mixer-receiver-v1
+
+      - name: Run no-change Linux capability and rejection checks
+        run: |
+          receiver/linux/setup-v1.sh probe > "$RUNNER_TEMP/linux-probe.txt"
+          grep -Fx 'platform=linux' "$RUNNER_TEMP/linux-probe.txt" >/dev/null
+          ! grep -Fx 'user=root' "$RUNNER_TEMP/linux-probe.txt" >/dev/null
+          if SSH_ORIGINAL_COMMAND='sh -c whoami' receiver/linux/ssh-mixer-receiver-v1.py --forced --key ZmFrZQ== 2> "$RUNNER_TEMP/linux-rejection.json"; then
+            echo 'Unknown Receiver operation unexpectedly succeeded' >&2
+            exit 1
+          fi
+          python3 -c 'import json, os; p=json.load(open(os.environ["RUNNER_TEMP"] + "/linux-rejection.json")); assert p["code"] == "protocol-rejected"'
+
+      - name: Check patch whitespace
+        run: git diff --check
+
+  windows-receiver:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Parse PowerShell receiver artifacts
+        shell: pwsh
+        run: |
+          $failed = $false
+          foreach ($path in @(
+            'receiver/windows/setup-v1.ps1',
+            'receiver/windows/ssh-mixer-receiver-v1.ps1'
+          )) {
+            $tokens = $null
+            $errors = $null
+            [void][Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $path),
+              [ref]$tokens,
+              [ref]$errors
+            )
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object { Write-Error "${path}: $_" }
+              $failed = $true
+            }
+          }
+          if ($failed) { exit 1 }
+
+      - name: Run no-change Windows capability probe
+        shell: pwsh
+        run: |
+          $probe = & ./receiver/windows/setup-v1.ps1 -Mode Probe | ConvertFrom-Json
+          if ($probe.schemaVersion -ne 1 -or $probe.platform -ne 'windows') {
+            throw 'Windows Companion Setup probe returned unexpected output'
+          }
+
+      - name: Run Windows adapter tests
+        shell: pwsh
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHONPATH: src
+        run: python -m unittest tests.test_windows_receiver -v
+
+  macos-receiver:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Parse POSIX receiver artifacts
+        run: sh -n receiver/macos/setup-v1.sh receiver/macos/ssh-mixer-receiver-v1
+
+      - name: Run no-change Experimental macOS capability probe
+        run: |
+          receiver/macos/setup-v1.sh probe > "$RUNNER_TEMP/macos-probe.json"
+          python3 -c 'import json, os; p=json.load(open(os.environ["RUNNER_TEMP"] + "/macos-probe.json")); assert p["platform"] == "macos" and p["experimental"] is True and p["realDeviceVerified"] is False'
+
+      - name: Verify unknown macOS Receiver operation is rejected
+        run: |
+          if SSH_ORIGINAL_COMMAND='zsh -c whoami' receiver/macos/ssh-mixer-receiver-v1 --forced 2> "$RUNNER_TEMP/macos-rejection.json"; then
+            echo 'Unknown Receiver operation unexpectedly succeeded' >&2
+            exit 1
+          fi
+          python3 -c 'import json, os; p=json.load(open(os.environ["RUNNER_TEMP"] + "/macos-rejection.json")); assert p["code"] == "protocol-rejected" and p["experimental"] is True'
+
+      - name: Run Experimental macOS adapter tests
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHONPATH: src
+        run: python3 -m unittest tests.test_macos_receiver -v

@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+backend_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+backend="$backend_dir/ssh-mixer"
+
+source_name="cliamp"
+destination="both"
+host="${CLIAMP_STREAM_HOST:-}"
+user="${CLIAMP_STREAM_USER:-}"
+key="${CLIAMP_STREAM_KEY:-}"
+bitrate="${CLIAMP_STREAM_BITRATE:-128k}"
+list_sources=0
+
+usage() {
+  cat <<'USAGE'
+Usage: cliamp-stream [options]
+
+Compatibility wrapper for SSH-mixer. Streams cliamp by default and blocks until
+Ctrl-C, while delegating routing/session cleanup to the SSH-mixer backend.
+
+Options:
+  --list-sources       List SSH-mixer sources and exit
+  --source NAME        cliamp, system/default-monitor, sink-input:<id>, or a Pulse source name
+  --no-local           Use SSH mode instead of Both mode
+  --host HOST          Remote SSH host
+  --user USER          Remote SSH user
+  --key PATH           SSH private key path
+  --bitrate RATE       Opus bitrate
+  -h, --help           Show this help
+USAGE
+}
+
+while (($# > 0)); do
+  case "$1" in
+    --list-sources)
+      list_sources=1
+      shift
+      ;;
+    --source)
+      (($# >= 2)) || { echo "cliamp-stream: --source requires a value" >&2; exit 2; }
+      source_name=$2
+      shift 2
+      ;;
+    --no-local)
+      destination="ssh"
+      shift
+      ;;
+    --host)
+      (($# >= 2)) || { echo "cliamp-stream: --host requires a value" >&2; exit 2; }
+      host=$2
+      shift 2
+      ;;
+    --user)
+      (($# >= 2)) || { echo "cliamp-stream: --user requires a value" >&2; exit 2; }
+      user=$2
+      shift 2
+      ;;
+    --key)
+      (($# >= 2)) || { echo "cliamp-stream: --key requires a value" >&2; exit 2; }
+      key=$2
+      shift 2
+      ;;
+    --bitrate)
+      (($# >= 2)) || { echo "cliamp-stream: --bitrate requires a value" >&2; exit 2; }
+      bitrate=$2
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "cliamp-stream: unknown option: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if ((list_sources)); then
+  exec "$backend" list-sources --plain
+fi
+
+payload=$(python3 - "$source_name" "$destination" "$host" "$user" "$key" "$bitrate" <<'PY'
+import json
+import sys
+source, destination, host, user, key, bitrate = sys.argv[1:]
+if source in {"cliamp", "system", "default", "default-monitor"} or source.startswith(("source:", "sink-input:")):
+    source_id = source
+else:
+    source_id = f"source:{source}"
+remote = {"bitrate": bitrate}
+for name, value in {"host": host, "user": user, "keyPath": key}.items():
+    if value:
+        remote[name] = value
+payload = {
+    "sourceIds": [source_id],
+    "destination": destination,
+    "remote": remote,
+}
+print(json.dumps(payload))
+PY
+)
+
+exec "$backend" run --json "$payload"

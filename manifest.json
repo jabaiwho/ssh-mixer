@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "jabaiwho.ssh-mixer",
+  "name": "SSH-mixer",
+  "version": "0.1.0",
+  "author": "jabaiwho",
+  "license": "MIT",
+  "description": "Route selected local audio locally, over SSH, or both with persistent privacy lifecycle controls",
+  "kinds": ["panel", "service", "bar-widget"],
+  "keepLoaded": true,
+  "entryPoints": {
+    "panel": "Panel.qml",
+    "service": "Lifecycle.qml",
+    "barWidget": "Indicator.qml"
+  },
+  "barWidget": {
+    "displayName": "SSH-mixer Session",
+    "description": "Non-disableable indication while an SSH-mixer Session is active",
+    "category": "Audio",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

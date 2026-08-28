@@ -1,0 +1,8 @@
+{
+  "linux/companion": ["Initial reviewed public Linux Companion Setup with native-authenticated transactional Receiver updates"],
+  "linux/receiver": ["Initial reviewed public Linux Receiver Protocol v1 helper"],
+  "windows/companion": ["Initial reviewed public Windows Companion Setup with native-authenticated transactional Receiver updates"],
+  "windows/receiver": ["Initial reviewed public Windows Receiver Protocol v1 helper"],
+  "macos/companion": ["Experimental: initial reviewed public macOS Companion Setup with native-authenticated transactional Receiver updates"],
+  "macos/receiver": ["Experimental: initial reviewed public macOS Receiver Protocol v1 helper; realDeviceVerified remains false"]
+}

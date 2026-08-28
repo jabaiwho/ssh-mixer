@@ -1,0 +1,25 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.DS_Store
+
+# Runtime/config/log state must stay out of the repository.
+config.json
+session.json
+*.log
+state/
+runtime/
+logs/
+
+# Never commit credentials or private local config.
+*.key
+*.pem
+*.p12
+*.pfx
+id_*
+.env
+.env.*

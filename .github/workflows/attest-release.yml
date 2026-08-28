@@ -1,0 +1,67 @@
+name: Build and attest reviewed Receiver release
+
+on:
+  workflow_dispatch:
+    inputs:
+      published_at:
+        description: Exact approved UTC timestamp (YYYY-MM-DDTHH:MM:SSZ)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: receiver-v1.1.0-attestation
+  cancel-in-progress: false
+
+jobs:
+  build-attest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the exact reviewed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Require protected main and validate the repository
+        env:
+          PUBLISHED_AT: ${{ inputs.published_at }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main
+          printf '%s' "$PUBLISHED_AT" | grep -Ex '[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z' >/dev/null
+          test -z "$(git status --porcelain)"
+          python3 scripts/check_repository.py
+          python3 scripts/check_public_history.py --initial-release
+
+      - name: Build immutable unsigned artifacts and metadata
+        env:
+          PUBLISHED_AT: ${{ inputs.published_at }}
+        run: |
+          mkdir -p dist/artifacts
+          python3 scripts/build_release_metadata.py \
+            --version 1.1.0 \
+            --commit "$GITHUB_SHA" \
+            --published-at "$PUBLISHED_AT" \
+            --changes release/receiver-v1.1.0-changes.json \
+            --output dist/receiver-v1.1.0.json \
+            --artifact-dir dist/artifacts
+          (cd dist && sha256sum receiver-v1.1.0.json artifacts/* > SHA256SUMS)
+
+      - name: Attest every built subject
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/receiver-v1.1.0.json
+            dist/SHA256SUMS
+            dist/artifacts/*
+
+      - name: Retain exact unsigned subjects for offline signing review
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: receiver-v1.1.0-unsigned-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0

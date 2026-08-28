@@ -1,0 +1,151 @@
+#!/bin/sh
+set -eu
+
+PROTOCOL_VERSION=1
+HELPER_VERSION=1.1.0
+QUIET_START_DBFS=-40
+QUIET_MAXIMUM_DBFS=-24
+QUIET_STEP_DB=4
+QUIET_DURATION_SECONDS=0.5
+QUIET_FADE_SECONDS=0.08
+
+protocol_error() {
+  message=$1
+  printf '{"schemaVersion":1,"ok":false,"experimental":true,"stage":"receiver.protocol","code":"protocol-rejected","message":"%s"}\n' "$message" >&2
+  exit 64
+}
+
+if [ "${1:-}" != "--forced" ] || [ "${2:-}" != "--key" ] || [ "$#" -ne 3 ]; then
+  protocol_error "Receiver Protocol requires its fixed Managed Identity context"
+fi
+key_body=$3
+printf '%s\n' "$key_body" | grep -Eq '^[A-Za-z0-9+/]+={0,3}$' || protocol_error "Managed Identity key body is invalid"
+[ "$(id -u)" -ne 0 ] || protocol_error "Experimental macOS Receiver refuses elevated runtime"
+[ "$(uname -s)" = "Darwin" ] || protocol_error "Receiver platform is not macOS"
+
+architecture=$(uname -m)
+case "$architecture" in
+  arm64)
+    brew_path=/opt/homebrew/bin/brew
+    ffplay_path=/opt/homebrew/bin/ffplay
+    ;;
+  x86_64)
+    brew_path=/usr/local/bin/brew
+    ffplay_path=/usr/local/bin/ffplay
+    ;;
+  *) protocol_error "macOS architecture is unsupported" ;;
+esac
+
+command_text=${SSH_ORIGINAL_COMMAND:-}
+operation=
+dbfs=
+case "$command_text" in
+  "ssh-mixer-receiver v1 capabilities") operation=capabilities ;;
+  "ssh-mixer-receiver v1 diagnostics") operation=diagnostics ;;
+  "ssh-mixer-receiver v1 play") operation=play ;;
+  "ssh-mixer-receiver v1 remove") operation=remove ;;
+  "ssh-mixer-receiver v1 quiet-test --dbfs -40") operation=quiet-test; dbfs=-40 ;;
+  "ssh-mixer-receiver v1 quiet-test --dbfs -36") operation=quiet-test; dbfs=-36 ;;
+  "ssh-mixer-receiver v1 quiet-test --dbfs -32") operation=quiet-test; dbfs=-32 ;;
+  "ssh-mixer-receiver v1 quiet-test --dbfs -28") operation=quiet-test; dbfs=-28 ;;
+  "ssh-mixer-receiver v1 quiet-test --dbfs -24") operation=quiet-test; dbfs=-24 ;;
+  *) protocol_error "operation is malformed or not allowed" ;;
+esac
+
+ffplay_available=false
+[ -x "$ffplay_path" ] && ffplay_available=true
+
+if [ "$operation" = capabilities ]; then
+  printf '{"schemaVersion":1,"protocol":"v1","protocolVersion":%s,"helperVersion":"%s","platform":"macos","experimental":true,"realDeviceVerified":false,"architecture":"%s","runtimeElevated":false,"ffplay":%s,"operations":["capabilities","diagnostics","play","quiet-test","remove"],"quietTest":{"startDbfs":-40,"maximumDbfs":-24,"stepDb":4,"durationSeconds":0.5}}\n' "$PROTOCOL_VERSION" "$HELPER_VERSION" "$architecture" "$ffplay_available"
+  exit 0
+fi
+
+if [ "$operation" = diagnostics ]; then
+  version=$(sw_vers -productVersion)
+  printf '{"schemaVersion":1,"protocol":"v1","protocolVersion":%s,"helperVersion":"%s","platform":"macos","experimental":true,"realDeviceVerified":false,"architecture":"%s","version":"%s","runtimeElevated":false,"homebrewAvailable":%s,"ffplayAvailable":%s}\n' "$PROTOCOL_VERSION" "$HELPER_VERSION" "$architecture" "$version" "$([ -x "$brew_path" ] && printf true || printf false)" "$ffplay_available"
+  exit 0
+fi
+
+if [ "$operation" = remove ]; then
+  authorized_keys="$HOME/.ssh/authorized_keys"
+  suffix=" ssh-ed25519 $key_body ssh-mixer-managed-macos-v1"
+  if [ -e "$authorized_keys" ]; then
+    if [ -L "$(dirname "$authorized_keys")" ] || [ ! -f "$authorized_keys" ] || [ -L "$authorized_keys" ]; then
+      protocol_error "authorized_keys path is unsafe"
+    fi
+    work=$(mktemp "${TMPDIR:-/tmp}/ssh-mixer-remove.XXXXXX")
+    awk -v suffix="$suffix" 'index($0, suffix) != (length($0) - length(suffix) + 1)' "$authorized_keys" > "$work"
+    install -m 600 "$work" "$authorized_keys"
+    rm -f "$work"
+    if grep -Fq "$suffix" "$authorized_keys"; then
+      protocol_error "Managed Identity key revocation could not be verified"
+    fi
+  fi
+  helper_removed=false
+  if ! grep -q ' ssh-mixer-managed-macos-v1$' "$authorized_keys" 2>/dev/null; then
+    state_root=${XDG_STATE_HOME:-"$HOME/Library/Application Support"}
+    state_path="$state_root/ssh-mixer/quiet-test-v1"
+    rm -f "$state_path"
+    rmdir "$state_root/ssh-mixer" 2>/dev/null || true
+    helper_path=$0
+    if [ ! -f "$helper_path" ] || [ -L "$helper_path" ]; then
+      protocol_error "Receiver helper path is unsafe"
+    fi
+    rm -f "$helper_path"
+    if [ -e "$helper_path" ] || [ -e "$state_path" ]; then
+      protocol_error "unshared Receiver state removal could not be verified"
+    fi
+    helper_removed=true
+  fi
+  printf '{"schemaVersion":1,"ok":true,"experimental":true,"realDeviceVerified":false,"keyRevoked":true,"helperRemoved":%s}\n' "$helper_removed"
+  exit 0
+fi
+
+[ -x "$ffplay_path" ] || protocol_error "verified Homebrew ffplay is unavailable"
+
+if [ "$operation" = play ]; then
+  exec "$ffplay_path" -hide_banner -loglevel warning -nodisp -autoexit -fflags nobuffer -flags low_delay -f ogg -
+fi
+
+state_root=${XDG_STATE_HOME:-"$HOME/Library/Application Support"}
+state_dir="$state_root/ssh-mixer"
+state_path="$state_dir/quiet-test-v1"
+previous=
+if [ -f "$state_path" ] && [ ! -L "$state_path" ]; then
+  previous=$(sed -n '1p' "$state_path")
+fi
+case "$previous" in
+  ''|-40|-36|-32|-28|-24) ;;
+  *) previous= ;;
+esac
+if [ -z "$previous" ]; then
+  [ "$dbfs" -eq "$QUIET_START_DBFS" ] || protocol_error "the first quiet test must start at -40 dBFS"
+else
+  expected=$((previous + QUIET_STEP_DB))
+  [ "$dbfs" -eq "$QUIET_START_DBFS" ] || [ "$dbfs" -eq "$previous" ] || [ "$dbfs" -eq "$expected" ] || protocol_error "quiet test increases must use 4 dB steps"
+fi
+if [ "$dbfs" -lt "$QUIET_START_DBFS" ] || [ "$dbfs" -gt "$QUIET_MAXIMUM_DBFS" ]; then
+  protocol_error "quiet test level is outside the approved range"
+fi
+
+case "$dbfs" in
+  -40) amplitude=0.01000000 ;;
+  -36) amplitude=0.01584893 ;;
+  -32) amplitude=0.02511886 ;;
+  -28) amplitude=0.03981072 ;;
+  -24) amplitude=0.06309573 ;;
+  *) protocol_error "quiet test level is outside the approved range" ;;
+esac
+
+source="aevalsrc=$amplitude*sin(2*PI*440*t):s=48000:d=$QUIET_DURATION_SECONDS"
+filter="afade=t=in:st=0:d=$QUIET_FADE_SECONDS,afade=t=out:st=0.42:d=$QUIET_FADE_SECONDS"
+"$ffplay_path" -hide_banner -loglevel error -nodisp -autoexit -f lavfi -i "$source" -af "$filter" -t "$QUIET_DURATION_SECONDS"
+
+[ ! -L "$state_dir" ] || protocol_error "quiet test state directory is unsafe"
+mkdir -p "$state_dir"
+chmod 700 "$state_dir"
+temporary=$(mktemp "$state_dir/.quiet-test.XXXXXX")
+printf '%s\n' "$dbfs" > "$temporary"
+chmod 600 "$temporary"
+mv -f "$temporary" "$state_path"
+printf '{"schemaVersion":1,"ok":true,"experimental":true,"dbfs":%s,"durationSeconds":0.5,"changesSystemVolume":false}\n' "$dbfs"
