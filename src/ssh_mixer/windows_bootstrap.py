@@ -192,7 +192,10 @@ class WindowsBootstrap(LinuxBootstrap):
                 text=True,
             )
             self._apply_rolled_back = (
-                '"code":"rolled-back"' in applied.stdout
+                any(
+                    f'"code":"{code}"' in applied.stdout
+                    for code in ("rolled-back", "no-changes-applied")
+                )
                 and "Rollback-Incomplete" not in applied.stdout
             )
             if applied.returncode != 0:
