@@ -188,7 +188,9 @@ class WindowsSetupTest(unittest.TestCase):
         receiver = RECEIVER_PATH.read_text(encoding="utf-8")
         for artifact in (setup, receiver):
             self.assertIn("function Test-FFplayUsable", artifact)
-            self.assertIn("& $command.Source '-version'", artifact)
+            self.assertIn("[Diagnostics.ProcessStartInfo]::new()", artifact)
+            self.assertIn("$startInfo.UseShellExecute = $false", artifact)
+            self.assertIn("$process.WaitForExit(5000)", artifact)
         self.assertIn("ffplay = (Test-FFplayUsable)", setup)
         self.assertIn("if (-not (Test-FFplayUsable))", setup)
         self.assertIn("ffplay = (Test-FFplayUsable)", receiver)
