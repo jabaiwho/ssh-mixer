@@ -38,12 +38,33 @@ function Assert-NonElevated {
 function Test-FFplayUsable {
     $command = Get-Command 'ffplay.exe' -CommandType Application -ErrorAction SilentlyContinue
     if ($null -eq $command) { return $false }
+    $process = $null
     try {
-        & $command.Source '-version' *> $null
-        return $LASTEXITCODE -eq 0
+        $startInfo = [Diagnostics.ProcessStartInfo]::new()
+        $startInfo.FileName = [string]$command.Source
+        $startInfo.Arguments = '-version'
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $process = [Diagnostics.Process]::new()
+        $process.StartInfo = $startInfo
+        if (-not $process.Start()) { return $false }
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $stderr = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit(5000)) {
+            $process.Kill()
+            return $false
+        }
+        [void]$stdout.Result
+        [void]$stderr.Result
+        return $process.ExitCode -eq 0
     }
     catch {
         return $false
+    }
+    finally {
+        if ($null -ne $process) { $process.Dispose() }
     }
 }
 
