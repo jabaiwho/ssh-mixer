@@ -183,6 +183,17 @@ class WindowsSetupTest(unittest.TestCase):
         receiver = RECEIVER_PATH.read_text(encoding="utf-8")
         self.assertIn("'-flags' 'low_delay' '-sync' 'ext' '-f' 'ogg'", receiver)
 
+    def test_setup_and_receiver_reject_unusable_ffplay_application_aliases(self) -> None:
+        setup = SETUP_PATH.read_text(encoding="utf-8")
+        receiver = RECEIVER_PATH.read_text(encoding="utf-8")
+        for artifact in (setup, receiver):
+            self.assertIn("function Test-FFplayUsable", artifact)
+            self.assertIn("& $command.Source '-version'", artifact)
+        self.assertIn("ffplay = (Test-FFplayUsable)", setup)
+        self.assertIn("if (-not (Test-FFplayUsable))", setup)
+        self.assertIn("ffplay = (Test-FFplayUsable)", receiver)
+        self.assertIn("if (-not (Test-FFplayUsable))", receiver)
+
     def test_receiver_quiet_test_is_fixed_bounded_faded_and_non_elevated(self) -> None:
         receiver = RECEIVER_PATH.read_text(encoding="utf-8")
         self.assertIn("$QuietStartDbfs = -40", receiver)
