@@ -169,7 +169,7 @@ Installation requires the exact reviewed plan hash. Post-update platform, helper
 
 The release-specific production transaction uses native Bootstrap Authentication rather than expanding Managed Identity authority. It retains Receiver backups through post-update verification and commits or rolls back explicitly; dependency or system-service changes require a separate disclosed Companion Setup plan. The reviewed production trust root is committed, and this source pins Receiver release `1.1.1`; update operations fail closed until matching signed immutable metadata exists. See [release/README.md](release/README.md) for the manual metadata/signing process. Creating an update plan never installs it, and applying a current or changed plan still requires exact approval.
 
-The stream keeps 10 ms Opus frames, flushes each frame as an Ogg page, and makes FFplay follow its external monotonic clock so long-running source and Receiver clock differences are corrected instead of accumulating playback delay. Audio coding stays at the configured bitrate; the lower framing latency costs roughly 22 kbps of additional Ogg overhead.
+The source stream keeps 10 ms Opus frames and flushes each frame as an Ogg page. Receiver 1.1.1 makes FFplay follow its external monotonic clock so long-running source and Receiver clock differences are corrected instead of accumulating playback delay. Receiver 1.1.0 remains Protocol-v1 compatible and is not silently replaced, but it does not gain external-clock correction until its separately approved update; manual Refresh remains the recovery path. Audio coding stays at the configured bitrate, and the lower framing latency costs roughly 22 kbps of additional Ogg overhead.
 
 ## Troubleshooting
 
