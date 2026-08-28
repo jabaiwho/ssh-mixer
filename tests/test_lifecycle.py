@@ -84,6 +84,83 @@ class LifecyclePolicyTest(unittest.TestCase):
         self.assertEqual(heartbeat_mode, 0o600)
         self.assertEqual(indicator_mode, 0o600)
 
+    def test_session_refreshes_pipeline_after_streaming_without_reapplying_routing(self) -> None:
+        source = {
+            "id": "sink-input:7",
+            "type": "playback",
+            "pulseId": "7",
+            "name": "player.node",
+            "applicationName": "Player",
+            "processBinary": "player",
+            "label": "Player",
+            "sinkName": "output",
+        }
+
+        class ObservingWorker(SessionWorker):
+            launch_states: list[str] = []
+            operations: list[str] = []
+            pipeline_events: list[str] = []
+            wait_count = 0
+            refresh_terminations = 0
+
+            def _apply_operation(self, operation: dict) -> None:
+                self.operations.append(str(operation.get("op", "")))
+
+            def _start_pipeline(self, capture_source: str, remote: dict) -> None:
+                self.launch_states.append(str(self.current_state.get("state", "")))
+                self.pipeline_events.append("start")
+
+            def _wait_for_pipeline(self) -> tuple[int, str, str]:
+                self.pipeline_events.append("wait")
+                self.wait_count += 1
+                if self.wait_count == 1:
+                    return 0, "", "silence"
+                return 0, "", ""
+
+            def _terminate_children(self) -> None:
+                self.pipeline_events.append("terminate")
+                self.refresh_terminations += 1
+
+            def _forget_pipeline_processes(self) -> None:
+                self.pipeline_events.append("forget")
+
+            def _cleanup(self) -> None:
+                return None
+
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(Path(temp) / "config"),
+                "XDG_DATA_HOME": str(Path(temp) / "data"),
+                "XDG_STATE_HOME": str(Path(temp) / "state"),
+                "XDG_RUNTIME_DIR": str(Path(temp) / "runtime"),
+            },
+            clear=False,
+        ), patch("ssh_mixer.session.signal.signal"), patch(
+            "ssh_mixer.session.require_commands"
+        ), patch("ssh_mixer.session.discover_sources", return_value=[source]):
+            worker = ObservingWorker(
+                {
+                    "sourceIds": ["sink-input:7"],
+                    "sourceMatchers": [matcher_for_source(source)],
+                    "destination": "ssh",
+                    "remote": {},
+                },
+                "observed-session",
+            )
+            worker.run()
+
+        self.assertEqual(worker.launch_states, ["starting", "streaming"])
+        self.assertEqual(
+            worker.operations,
+            ["load-null-sink", "move-sink-input"],
+        )
+        self.assertEqual(worker.refresh_terminations, 1)
+        self.assertEqual(
+            worker.pipeline_events,
+            ["start", "wait", "terminate", "forget", "start", "wait"],
+        )
+
     def test_fatal_receiver_pipeline_exit_cleans_up_and_stays_stopped(self) -> None:
         source = {
             "id": "sink-input:7",
@@ -105,8 +182,8 @@ class LifecyclePolicyTest(unittest.TestCase):
             def _start_pipeline(self, capture_source: str, remote: dict) -> None:
                 return None
 
-            def _wait_for_pipeline(self) -> tuple[int, str]:
-                return 255, "receiver disconnected"
+            def _wait_for_pipeline(self) -> tuple[int, str, str]:
+                return 255, "receiver disconnected", ""
 
             def _cleanup(self) -> None:
                 self.cleaned = True

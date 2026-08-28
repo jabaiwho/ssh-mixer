@@ -174,7 +174,7 @@ class WindowsSetupTest(unittest.TestCase):
             with self.assertRaises(SetupError):
                 parse_receiver_operation(command)
 
-    def test_receiver_playback_uses_external_clock_to_bound_drift(self) -> None:
+    def test_receiver_playback_uses_external_clock_for_continuous_correction(self) -> None:
         receiver = RECEIVER_PATH.read_text(encoding="utf-8")
         self.assertIn("'-flags' 'low_delay' '-sync' 'ext' '-f' 'ogg'", receiver)
 

@@ -43,9 +43,9 @@ from .connections import (
 )
 from .diagnostics import DiagnosticStore, redact
 from .openssh_profiles import inspect_profile, profile_connection
-from .versions import PROTOCOL_VERSION
 from .routing import DEFAULT_MIX_SINK, RoutingError, build_route_plan
-from .streaming import build_encoder_command
+from .streaming import StreamEpochPolicy, StreamSilenceState, build_encoder_command
+from .versions import PROTOCOL_VERSION
 
 ACTIVE_STATES = {"starting", "streaming", "local", "stopping"}
 
@@ -208,6 +208,14 @@ def require_commands(names: list[str]) -> None:
     missing = [name for name in names if not command_exists(name)]
     if missing:
         raise SessionError("missing required command(s): " + ", ".join(missing))
+
+
+def read_encoder_diagnostics(stream: Any) -> str:
+    try:
+        output = os.read(stream.fileno(), 65_536)
+    except (BlockingIOError, OSError):
+        return ""
+    return output.decode("utf-8", errors="replace")
 
 
 def run_pactl(args: list[str], check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -748,23 +756,69 @@ class SessionWorker:
         ffmpeg = subprocess.Popen(
             ffmpeg_cmd,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             stdin=subprocess.DEVNULL,
             start_new_session=True,
         )
-        if ffmpeg.stdout is None:
-            raise SessionError("could not capture ffmpeg stdout")
-        ssh = subprocess.Popen(
-            ssh_cmd,
-            stdin=ffmpeg.stdout,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
+        if ffmpeg.stdout is None or ffmpeg.stderr is None:
+            kill_process_group(ffmpeg.pid, signal.SIGTERM)
+            raise SessionError("could not capture ffmpeg stream pipes")
+        os.set_blocking(ffmpeg.stderr.fileno(), False)
+        try:
+            ssh = subprocess.Popen(
+                ssh_cmd,
+                stdin=ffmpeg.stdout,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        except Exception:
+            ffmpeg.stdout.close()
+            kill_process_group(ffmpeg.pid, signal.SIGTERM)
+            raise
         ffmpeg.stdout.close()
         self.children = [ffmpeg, ssh]
         self._track_process("ffmpeg", ffmpeg.pid)
         self._track_process("ssh", ssh.pid)
+
+    def _forget_pipeline_processes(self) -> None:
+        pipeline_pids = {child.pid for child in self.children}
+        self.resources["processes"] = [
+            process
+            for process in self.resources["processes"]
+            if process.get("pid") not in pipeline_pids
+        ]
+        self.children = []
+
+    def _run_pipeline_epochs(
+        self, capture_source: str, remote: dict[str, Any]
+    ) -> tuple[int, str]:
+        while not self.stop_requested:
+            exit_code, error, refresh_reason = self._wait_for_pipeline()
+            if not refresh_reason:
+                return exit_code, error
+            self.diagnostics.record(
+                stage="session.stream",
+                code=f"refresh-{refresh_reason}-starting",
+                message=(
+                    "Remote stream epoch reached its hard deadline; replacement started."
+                    if refresh_reason == "deadline"
+                    else "Qualifying stream silence detected; replacement started."
+                ),
+                session_id=self.session_id,
+            )
+            self._terminate_children()
+            self._forget_pipeline_processes()
+            if self.stop_requested:
+                return 0, ""
+            self._start_pipeline(capture_source, remote)
+            self.diagnostics.record(
+                stage="session.stream",
+                code=f"refresh-{refresh_reason}-launched",
+                message="Remote stream epoch replacement processes launched.",
+                session_id=self.session_id,
+            )
+        return 0, ""
 
     def _terminate_children(self) -> None:
         for child in self.children:
@@ -779,19 +833,28 @@ class SessionWorker:
             if child.poll() is None:
                 kill_process_group(child.pid, signal.SIGKILL)
 
-    def _wait_for_pipeline(self) -> tuple[int, str]:
+    def _wait_for_pipeline(self) -> tuple[int, str, str]:
         ffmpeg, ssh = self.children
+        epoch = StreamEpochPolicy(started_at=time.monotonic())
+        silence = StreamSilenceState()
         while not self.stop_requested:
             ffmpeg_code = ffmpeg.poll()
             ssh_code = ssh.poll()
             if ffmpeg_code is not None or ssh_code is not None:
                 if ssh_code not in (None, 0):
-                    return int(ssh_code), f"ssh exited with status {ssh_code}"
+                    return int(ssh_code), f"ssh exited with status {ssh_code}", ""
                 if ffmpeg_code not in (None, 0):
-                    return int(ffmpeg_code), f"ffmpeg exited with status {ffmpeg_code}"
-                return 0, ""
+                    return int(ffmpeg_code), f"ffmpeg exited with status {ffmpeg_code}", ""
+                return 0, "", ""
+            silence_started = silence.feed(read_encoder_diagnostics(ffmpeg.stderr))
+            refresh_reason = epoch.refresh_reason(
+                now=time.monotonic(),
+                silence_active=silence.active or silence_started,
+            )
+            if refresh_reason:
+                return 0, "", refresh_reason
             time.sleep(0.2)
-        return 0, ""
+        return 0, "", ""
 
     def _cleanup(self) -> None:
         self._terminate_children()
@@ -861,9 +924,13 @@ class SessionWorker:
                     if operation.get("op") == "stream-remote":
                         continue
                     self._apply_operation(operation)
-                self._start_pipeline(str(plan["captureSource"]), self.config.get("remote", {}))
+                self._start_pipeline(
+                    str(plan["captureSource"]), self.config.get("remote", {})
+                )
                 self._write_state("streaming", plan=plan)
-                exit_code, error = self._wait_for_pipeline()
+                exit_code, error = self._run_pipeline_epochs(
+                    str(plan["captureSource"]), self.config.get("remote", {})
+                )
                 if self.stop_requested:
                     exit_code = 0
                     error = ""
