@@ -1632,7 +1632,8 @@ Item {
                   visible: !!root.connection && root.connection.securityLevel === "receiver-only"
                   width: parent.width
                   text: {
-                    var platform = String(root.connection.receiverPlatform || "")
+                    var connection = root.connection || ({})
+                    var platform = String(connection.receiverPlatform || "")
                     var receiverVersions = root.componentVersions.receiver || {}
                     var companionVersions = root.componentVersions.companion || {}
                     return "Versions · plugin " + String(root.componentVersions.plugin || "unknown")
@@ -1953,7 +1954,8 @@ Item {
                     ActionButton {
                       label: "Approve, install, and verify"
                       rowIndex: -1
-                      enabled: !root.windowsSetupPlan.administratorConfirmationRequired || root.windowsAdministratorConfirmed
+                      enabled: !!root.windowsSetupPlan
+                        && (!root.windowsSetupPlan.administratorConfirmationRequired || root.windowsAdministratorConfirmed)
                       onPressed: root.applyWindowsReceiver()
                       Layout.fillWidth: true
                     }
@@ -2475,8 +2477,8 @@ Item {
     foreground: root.foreground
     fontFamily: root.fontFamily
     selected: rowIndex === 2 && root.activeSession
-    hasCursor: root.cursorActive && root.focusSection === "actions" && root.focusIndex === rowIndex
-    onHovered: function(on) { if (on) { root.cursorActive = true; root.focusSection = "actions"; root.focusIndex = rowIndex } }
+    hasCursor: rowIndex >= 0 && root.cursorActive && root.focusSection === "actions" && root.focusIndex === rowIndex
+    onHovered: function(on) { if (on && rowIndex >= 0) { root.cursorActive = true; root.focusSection = "actions"; root.focusIndex = rowIndex } }
     onClicked: pressed()
   }
 }
