@@ -181,6 +181,10 @@ class MacOsSetupTest(unittest.TestCase):
         self.assertIn('"experimental":true', receiver)
         self.assertNotIn("osascript", receiver)
 
+    def test_receiver_playback_uses_external_clock_to_bound_drift(self) -> None:
+        receiver = RECEIVER_PATH.read_text(encoding="utf-8")
+        self.assertIn("-flags low_delay -sync ext -f ogg", receiver)
+
     def test_unknown_forced_command_returns_structured_failure(self) -> None:
         completed = subprocess.run(
             [str(RECEIVER_PATH), "--forced"],

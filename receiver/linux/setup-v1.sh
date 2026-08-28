@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 PROTOCOL_VERSION="v1"
-COMPANION_VERSION="1.1.0"
+COMPANION_VERSION="1.1.1"
 MODE="${1:-}"
 
 if [[ "$(id -u)" -eq 0 || "$(id -un)" == "root" ]]; then

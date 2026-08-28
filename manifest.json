@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "jabaiwho.ssh-mixer",
   "name": "SSH-mixer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "jabaiwho",
   "license": "MIT",
   "description": "Route selected local audio locally, over SSH, or both with persistent privacy lifecycle controls",

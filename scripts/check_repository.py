@@ -241,12 +241,12 @@ def check_update_versions(errors: list[str]) -> None:
     if plugin_match is not None and f'"pluginVersion": "{plugin_match.group(1)}"' not in builder_text:
         errors.append("release metadata builder plugin version is not synchronized")
     expected_markers = {
-        "receiver/linux/setup-v1.sh": 'COMPANION_VERSION="1.1.0"',
-        "receiver/linux/ssh-mixer-receiver-v1.py": 'HELPER_VERSION = "1.1.0"',
-        "receiver/windows/setup-v1.ps1": "$CompanionVersion = '1.1.0'",
-        "receiver/windows/ssh-mixer-receiver-v1.ps1": "$HelperVersion = '1.1.0'",
-        "receiver/macos/setup-v1.sh": "COMPANION_VERSION=1.1.0",
-        "receiver/macos/ssh-mixer-receiver-v1": "HELPER_VERSION=1.1.0",
+        "receiver/linux/setup-v1.sh": 'COMPANION_VERSION="1.1.1"',
+        "receiver/linux/ssh-mixer-receiver-v1.py": 'HELPER_VERSION = "1.1.1"',
+        "receiver/windows/setup-v1.ps1": "$CompanionVersion = '1.1.1'",
+        "receiver/windows/ssh-mixer-receiver-v1.ps1": "$HelperVersion = '1.1.1'",
+        "receiver/macos/setup-v1.sh": "COMPANION_VERSION=1.1.1",
+        "receiver/macos/ssh-mixer-receiver-v1": "HELPER_VERSION=1.1.1",
     }
     for relative, marker in expected_markers.items():
         if marker not in (ROOT / relative).read_text(encoding="utf-8"):

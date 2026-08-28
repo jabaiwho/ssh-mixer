@@ -23,7 +23,10 @@ Before each platform run:
 python3 scripts/check_repository.py
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest discover -s tests -v
 omarchy plugin validate .
+python3 scripts/check_stream_latency.py
 ```
+
+The latency check must report 10 ms frames, 10,000 µs Ogg pages, and no audio page longer than 480 samples at 48 kHz.
 
 Confirm the source working tree is clean and the exact commit was reviewed. Back up Receiver state through the platform's normal administrative process. Do not bypass a native warning or prompt.
 
@@ -37,7 +40,7 @@ Test at least one supported native package family affected by the release. If pa
 4. **Setup plan:** Run **Plan Linux Receiver**. Confirm the plan is no-change and accurately lists user files, exact package manager/packages, and each `sudo` command. Confirm direct root setup is rejected.
 5. **Managed Identity setup:** Approve the unchanged plan. Complete only native OpenSSH/`sudo` prompts. Verify helper checksum/version, one key-specific `authorized_keys` entry, private local key modes, and no unrelated key replacement.
 6. **Restriction checks:** Confirm automated verification passes for capabilities and fails for shell/arbitrary command, remote forwarding, agent forwarding, X11, PTY, and user-RC behavior. Verify the runtime account is non-root.
-7. **Playback Session:** Select generated TEST_APPLICATION playback, choose SSH, Start explicitly, and confirm audio only on the Receiver. Stop and verify moved playback and temporary `ssh_mixer_mix` resources are restored/removed.
+7. **Playback Session:** Select generated TEST_APPLICATION playback, choose SSH, Start explicitly, and confirm audio only on the Receiver. With generated audiovisual material, compare immediate synchronization with synchronization after at least 30 minutes; confirm latency remains visually stable, then deliberately refresh once and confirm no accumulated multi-second queue was hidden. Record the output transport class without its product/device name. Stop and verify moved playback and temporary `ssh_mixer_mix` resources are restored/removed.
 8. **Both Session:** Repeat in Both and confirm local plus Receiver audio without creating a microphone feedback route.
 9. **Source restoration:** Save a playback-only Mix Profile, restart TEST_APPLICATION so temporary IDs change, and confirm exactly one stable match restores. Create missing and ambiguous conditions and confirm nothing starts. Confirm profile load alone never starts.
 10. **Capture privacy:** Select only the controlled test Capture Source. Confirm the urgent persistent indicator, hidden Receiver label default, and no local monitor loop. Lock the source and verify Capture stops and does not resume on unlock. Repeat with continue-playback policy and verify Capture still stops.
@@ -61,7 +64,7 @@ Use a disposable supported Windows installation with Microsoft OpenSSH 8.1 or ne
 4. Approve setup. Observe native Windows security prompts without bypass. Confirm only the planned Microsoft OpenSSH capability/service/firewall changes, explicit `winget` source operation, helper, key entry, and ACL changes occur.
 5. Verify the authorized-key ACL owner/protection/allow-list appropriate to the selected standard/administrator path. Confirm unrelated authorized keys remain.
 6. Verify helper checksum/version, Protocol capabilities, `runtimeElevated: false`, and rejection of shell/arbitrary command, forwarding, agent, X11, PTY, and user startup behavior.
-7. Run Linux steps 7–14 for SSH/Both playback, stable restoration, controlled Capture lifecycle, indicator/lifecycle failure, bounded quiet test, and diagnostics. Confirm the Windows Receiver never changes system volume.
+7. Run Linux steps 7–14 for SSH/Both playback, long-running synchronization, stable restoration, controlled Capture lifecycle, indicator/lifecycle failure, bounded quiet test, and diagnostics. For the latency run, compare immediate lip sync with at least 30 minutes of the same generated audiovisual material and verify a refresh does not reveal accumulated multi-second drift. Confirm the Windows Receiver never changes system volume.
 8. In a disposable snapshot, induce safe failures for helper copy, ACL verification, Winget/FFplay verification, and post-install protocol verification. Confirm files/ACLs/capability/firewall/package state restore where safe and incomplete rollback is explicit where not.
 9. Test key-specific removal with another managed key present, last-key helper removal, offline Pending Cleanup/retry, and user-managed abandonment semantics.
 10. Run the Windows Companion independently with `setup-v1.ps1 -Mode Remove -KeyBody MANAGED_PUBLIC_KEY_BODY`. Confirm the selected key is absent, unrelated keys remain, helper removal accurately reflects sharing, and a required Administrator prompt is not bypassed.

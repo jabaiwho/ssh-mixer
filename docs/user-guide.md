@@ -152,7 +152,7 @@ Use **Clear diagnostics** to delete retained events immediately. **Contribute a 
 
 ## Updates
 
-Creating an update plan never installs anything. SSH-mixer pins signed immutable Receiver release `1.1.0`; a missing, changed, invalid, or incompatible release fails closed before installation.
+Creating an update plan never installs anything. This source pins Receiver release `1.1.1`; a missing, unpublished, changed, invalid, or incompatible signed immutable release fails closed before installation.
 
 When configured, **Check signed Receiver update** verifies the plugin-pinned metadata signature, checks current Receiver capabilities, and displays exact component, native-authentication, privilege, and rollback changes. The Managed Identity cannot update executable code. After unchanged plan-hash approval, SSH-mixer uses native OpenSSH authentication, verifies immutable URL scope, byte size, and SHA-256, retains protected Receiver backups, runs the signed Companion Setup, verifies platform, helper version, protocol compatibility, restrictions, and non-elevated runtime, then commits. Failure restores the prior helper and exact authorized-key file and reports incomplete rollback honestly. Private source staging is also verified removed.
 

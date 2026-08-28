@@ -76,6 +76,10 @@ _Avoid_: Preset, session config
 One explicitly started period of audio routing and optional receiver streaming, ending on user stop or a configured lifecycle event.
 _Avoid_: Stream config
 
+**Stream Cadence**:
+The fixed Opus-frame, Ogg-page, and Receiver clock policy that bounds transport latency during a Session.
+_Avoid_: Buffer tweak, restart interval
+
 **Quick Start**:
 An explicit user action that starts a verified playback-only Mix Profile without reopening the full panel.
 _Avoid_: Autostart

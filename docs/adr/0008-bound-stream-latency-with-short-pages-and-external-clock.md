@@ -1,0 +1,11 @@
+# Bound stream latency with short pages and an external Receiver clock
+
+SSH-mixer will encode 10 ms Opus frames, flush one 10 ms Ogg page per frame, and run FFplay with its external monotonic clock as synchronization master. The source cadence is fixed across platforms; Linux, Windows, and Experimental macOS Receiver adapters use the same external-clock playback policy. Receiver Protocol remains v1 because operations and message shapes do not change.
+
+The earlier one-page-per-frame fix removed Ogg's approximately one-second default batching delay, but a long-running Windows Session could still accumulate seconds of playback latency that a stream restart cleared. A real-device Tailscale A/B test with wireless USB audio found no material sender/TCP backlog. With external synchronization, FFplay reported a zero-kilobyte audio queue and master/audio clock difference between -2 ms and +15 ms during a ten-minute diagnostic window. A 10 ms source cadence then remained visually synchronized for more than 55 minutes while the TCP send queue remained negligible.
+
+An isolated real FFmpeg/FFplay timing harness measured a median near 158 ms with 20 ms frames, near 135 ms with 10 ms frames, and no further improvement with 5 ms frames. We therefore reject 20 ms as avoidable latency and 5 ms as overhead without measured benefit. Ten-millisecond pages add roughly 22 kbit/s of Ogg framing overhead at 100 pages per second; audio coding remains at the selected bitrate.
+
+We reject automatic periodic stream restarts as the default remedy. A restart creates an audible gap, conceals rather than corrects clock disagreement, and would add automatic Session behavior. Manual refresh remains available. A future bounded native Windows playback adapter may lower FFplay's remaining device-buffer floor, but it is not required for this change and must receive separate dependency, permission, rollback, and real-device review.
+
+The deterministic latency check parses real FFmpeg Ogg output and fails if any audio page spans more than one 480-sample frame at 48 kHz. Receiver adapter tests require external-clock invocation while existing protocol and forwarding-rejection tests preserve the security boundary.

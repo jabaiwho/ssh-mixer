@@ -2,7 +2,7 @@
 set -eu
 
 PROTOCOL_VERSION=1
-HELPER_VERSION=1.1.0
+HELPER_VERSION=1.1.1
 QUIET_START_DBFS=-40
 QUIET_MAXIMUM_DBFS=-24
 QUIET_STEP_DB=4
@@ -104,7 +104,7 @@ fi
 [ -x "$ffplay_path" ] || protocol_error "verified Homebrew ffplay is unavailable"
 
 if [ "$operation" = play ]; then
-  exec "$ffplay_path" -hide_banner -loglevel warning -nodisp -autoexit -fflags nobuffer -flags low_delay -f ogg -
+  exec "$ffplay_path" -hide_banner -loglevel warning -nodisp -autoexit -fflags nobuffer -flags low_delay -sync ext -f ogg -
 fi
 
 state_root=${XDG_STATE_HOME:-"$HOME/Library/Application Support"}

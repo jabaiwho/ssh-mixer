@@ -45,6 +45,7 @@ from .diagnostics import DiagnosticStore, redact
 from .openssh_profiles import inspect_profile, profile_connection
 from .versions import PROTOCOL_VERSION
 from .routing import DEFAULT_MIX_SINK, RoutingError, build_route_plan
+from .streaming import build_encoder_command
 
 ACTIVE_STATES = {"starting", "streaming", "local", "stopping"}
 
@@ -742,40 +743,7 @@ class SessionWorker:
         resolved = resolve_remote(remote)
         bitrate = str(resolved.get("bitrate", "128k")) or "128k"
         receiver = str(resolved.get("receiverCommand", DEFAULT_RECEIVER_COMMAND))
-        ffmpeg_cmd = [
-            "ffmpeg",
-            "-hide_banner",
-            "-loglevel",
-            "warning",
-            "-nostdin",
-            "-f",
-            "pulse",
-            "-thread_queue_size",
-            "512",
-            "-i",
-            capture_source,
-            "-ac",
-            "2",
-            "-ar",
-            "48000",
-            "-c:a",
-            "libopus",
-            "-b:a",
-            bitrate,
-            "-application",
-            "audio",
-            "-frame_duration",
-            "20",
-            "-vn",
-            "-sn",
-            "-f",
-            "ogg",
-            # The Ogg muxer's one-second default batches otherwise low-latency
-            # Opus packets. Flush one page per encoded frame instead.
-            "-page_duration",
-            "20000",
-            "pipe:1",
-        ]
+        ffmpeg_cmd = build_encoder_command(capture_source, bitrate)
         ssh_cmd = [*ssh_base_command(resolved), receiver]
         ffmpeg = subprocess.Popen(
             ffmpeg_cmd,
