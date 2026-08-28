@@ -95,7 +95,7 @@ Companion Setup may install `python3` and/or `ffmpeg` using one detected trusted
 
 ### Windows
 
-Companion Setup may use Microsoft's Windows Capability mechanism for OpenSSH Server, configure/start `sshd`, create the matching firewall rule, install `Gyan.FFmpeg` for the user from the explicit Winget source, write the PowerShell helper under the user's `.ssh` directory, and set/verify required ACLs. Administrator capability and every elevation-requiring change are disclosed. The Receiver Protocol itself rejects an elevated runtime token.
+Companion Setup may use Microsoft's Windows Capability mechanism for OpenSSH Server, configure/start `sshd`, create the matching firewall rule, install `Gyan.FFmpeg` for the user from the explicit Winget source, write the PowerShell helper under the user's `.ssh` directory, and set/verify required ACLs. Administrator capability and every elevation-requiring change are disclosed. Fixed PowerShell setup is noninteractive and does not allocate an SSH PTY; a privilege-requiring plan fails before identity generation unless Bootstrap Authentication is already elevated. The Receiver Protocol itself rejects an elevated runtime token.
 
 ### Experimental macOS
 

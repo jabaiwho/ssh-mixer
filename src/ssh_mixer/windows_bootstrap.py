@@ -180,12 +180,8 @@ class WindowsBootstrap(LinuxBootstrap):
                 f"-InboundSshVerified {inbound_verified}"
             )
             self._apply_changed_receiver = True
-            requires_tty = any(
-                change.get("requiresPrivilege") is True
-                for change in plan.get("changes", [])
-            )
             applied = self.runner(
-                [*self._ssh(tty=requires_tty), _encoded_powershell(apply_script)],
+                [*self._ssh(), _encoded_powershell(apply_script)],
                 check=False,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -209,7 +205,7 @@ class WindowsBootstrap(LinuxBootstrap):
                 raise SetupError("Windows setup transaction path is invalid")
             self._staging_remote_dir = remote_dir
             self._transaction_path = transaction
-            self._transaction_requires_tty = requires_tty
+            self._transaction_requires_tty = False
             public_result = {key: value for key, value in result.items() if key != "transaction"}
             return {"ok": True, "setup": public_result}
         finally:
