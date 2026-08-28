@@ -4,7 +4,9 @@ Only the maintainer may approve, sign, publish, replace, yank, or announce an SS
 
 ## Current release status
 
-The approved public production signer is pinned in `release/allowed_signers`; there is not yet signed production metadata or attestation evidence in this branch. The native-authenticated production transaction and a full-commit-pinned manual attestation workflow are implemented but remain unexecuted and lack hosted/real-device release evidence. Runtime updates therefore fail closed. Complete and review every gate below before the first public release; do not describe a source checkout as a signed release. The current reviewed state and publication blockers are tracked in [initial public-release readiness](release-readiness.md).
+Plugin `v0.1.0` and Receiver `v1.1.0` were published from source commit `917f812bf2c5b4a63de6b5c59f43b904600858d9`. The Receiver release is signed, attested, immutable, and available at <https://github.com/jabaiwho/ssh-mixer/releases/tag/receiver-v1.1.0>. The production signer remains pinned in `release/allowed_signers`; hosted CI, Linux and Windows real-device transaction evidence, strict provenance verification, rollback, and post-publication byte checks are recorded in the completed [initial public-release readiness record](release-readiness.md). macOS remains Experimental with `realDeviceVerified: false`.
+
+The gates below remain mandatory for every later release. A source checkout is not a signed Receiver artifact, automation cannot approve publication, and an existing immutable tag or asset is never replaced.
 
 ## Release units and compatibility
 

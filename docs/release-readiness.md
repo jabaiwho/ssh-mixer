@@ -1,6 +1,8 @@
-# Initial public-release readiness
+# Initial public-release readiness — completed record
 
-This is the maintainer checkpoint for issue #18. It distinguishes completed local review from operations that require a separate approval or evidence that does not yet exist.
+This document began as the maintainer checkpoint for issue #18. Its pre-publication review narrative is retained as historical evidence; statements describing then-open gates or a private canonical repository are not current status.
+
+The approved outcome is plugin `v0.1.0` and immutable Receiver `v1.1.0` at source commit `917f812bf2c5b4a63de6b5c59f43b904600858d9`. Hosted CI run `33139410848` passed all required Linux/QML, Windows, and Experimental macOS jobs. Attestation run `33139861588` produced provenance for the six artifacts, metadata, and `SHA256SUMS`; all eight subjects were downloaded, matched byte-for-byte, and verified against the exact workflow, source commit, and `refs/heads/main`. The metadata SHA-256 is `2dea724307b32789b4450178e0d523d6f29d5a096b2e6f1fc73d640cd19c3770`. The final public release is <https://github.com/jabaiwho/ssh-mixer/releases/tag/receiver-v1.1.0>.
 
 ## Pinned review range
 
@@ -89,12 +91,12 @@ The new canonical repository was created privately and received only the audited
 - [x] Approve a production offline OpenSSH release-signing identity and commit only its reviewed namespace-restricted public `allowed_signers` line.
 - [x] Implement and locally review the native-authenticated production update transaction and non-publishing attestation workflow; Managed Identity authority remains unchanged.
 - [x] Run hosted and available real-device install, commit, rollback, privilege-disclosure, and cleanup evidence for the supported-platform transactions; keep macOS explicitly Experimental without a real-device claim.
-- [ ] Prepare deterministic artifacts twice, compare bytes, calculate size/SHA-256, sign metadata offline, and verify signatures independently.
-- [ ] Approve creation of signed `v0.1.0` and, if Receiver assets are published separately, `receiver-v1.1.0` tags at the exact clean root. Run the history audit with each approved release tag.
+- [x] Prepare deterministic artifacts twice, compare bytes, calculate size/SHA-256, sign metadata offline, and verify signatures independently.
+- [x] Approve creation of signed `v0.1.0` and `receiver-v1.1.0` tags at the exact clean root. Run the history audit with each approved release tag.
 - [x] Approve the private repository cutover. Before it, create a protected local bundle/checksum of every private ref. Do not place the bundle in the public tree.
 - [x] Run required hosted Linux, Windows, and macOS CI in the new private repository and resolve every failure.
-- [ ] Before public announcement, restrict allowed Actions, require full-SHA pinning where GitHub supports it, configure maintainer-only branch protection and required CI, enable private vulnerability reporting, and verify manual release approval. Re-query settings after every visibility change.
-- [ ] Generate and independently verify GitHub provenance attestations for every published artifact and metadata file.
-- [ ] Obtain a final maintainer confirmation before any rename, repository creation, push, visibility change, tag signature, asset upload, release publication, installation, or announcement.
+- [x] Before public announcement, restrict allowed Actions, require full-SHA pinning where GitHub supports it, configure maintainer-only branch protection and required CI, enable private vulnerability reporting, and verify manual release approval. Re-query settings after every visibility change.
+- [x] Generate and independently verify GitHub provenance attestations for every published artifact and metadata file.
+- [x] Obtain separate maintainer confirmations for repository cutover, visibility, tag signatures, tag pushes, immutable draft staging, and Receiver release publication. Announcement remains a separate decision.
 
-Until every applicable box is complete, there is no approved public release and issue #18 remains open.
+Every applicable publication box is complete. Issue #18 may close after the post-publication documentation correction is merged and its final evidence is recorded; no announcement is implied by closure.

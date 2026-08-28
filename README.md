@@ -10,12 +10,14 @@ The guided first-run, Connection, host-trust, identity, setup, privacy, diagnost
 
 ## Install
 
-There is not yet a signed production release or production update trust root. The following is a source/development installation: review and pin the exact commit rather than treating a moving branch as a verified release.
+SSH-mixer `v0.1.0` is distributed as reviewed source at one signed Git tag. Receiver `v1.1.0` is a separate [signed, attested, immutable production release](https://github.com/jabaiwho/ssh-mixer/releases/tag/receiver-v1.1.0), and its metadata trust root is pinned in `release/allowed_signers`. Omarchy plugins remain unsandboxed source, so review and pin the exact tag rather than enabling a moving branch.
 
 ```bash
-git clone https://github.com/jabaiwho/ssh-mixer ~/.config/omarchy/plugins/jabaiwho.ssh-mixer
+git clone --branch v0.1.0 --depth 1 \
+  https://github.com/jabaiwho/ssh-mixer \
+  ~/.config/omarchy/plugins/jabaiwho.ssh-mixer
 cd ~/.config/omarchy/plugins/jabaiwho.ssh-mixer
-git rev-parse HEAD
+test "$(git rev-parse HEAD)" = "917f812bf2c5b4a63de6b5c59f43b904600858d9"
 omarchy plugin validate ~/.config/omarchy/plugins/jabaiwho.ssh-mixer
 omarchy plugin enable jabaiwho.ssh-mixer
 ln -sf ~/.config/omarchy/plugins/jabaiwho.ssh-mixer/bin/ssh-mixer ~/.local/bin/ssh-mixer
@@ -165,7 +167,7 @@ An update plan is accepted only from detached OpenSSH-signed release metadata us
 
 Installation requires the exact reviewed plan hash. Post-update platform, helper-version, and protocol verification is mandatory; failure invokes the platform transaction rollback and reports whether the prior version was restored. Staging cleanup is also verified. Update code never uses Windows execution-policy bypasses, disables Gatekeeper, or clears macOS quarantine warnings.
 
-The release-specific production transaction uses native Bootstrap Authentication rather than expanding Managed Identity authority. It retains Receiver backups through post-update verification and commits or rolls back explicitly; dependency or system-service changes require a separate disclosed Companion Setup plan. The reviewed production trust root is committed, but no signed update is published yet, so runtime update operations remain fail-closed. See [release/README.md](release/README.md) for the manual metadata/signing process. Creating an update plan never installs it.
+The release-specific production transaction uses native Bootstrap Authentication rather than expanding Managed Identity authority. It retains Receiver backups through post-update verification and commits or rolls back explicitly; dependency or system-service changes require a separate disclosed Companion Setup plan. The reviewed production trust root is committed, and the plugin pins signed Receiver release `1.1.0`. See [release/README.md](release/README.md) for the manual metadata/signing process. Creating an update plan never installs it, and applying a current or changed plan still requires exact approval.
 
 The stream keeps 20 ms Opus frames and flushes each frame as an Ogg page instead of using FFmpeg's one-second page default. Audio coding stays at the configured bitrate; the lower latency costs roughly 11 kbps of additional Ogg framing overhead.
 
