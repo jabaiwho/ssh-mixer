@@ -75,6 +75,42 @@ function Resolve-FFplay {
     return (Get-Command 'ffplay.exe' -CommandType Application).Source
 }
 
+function Invoke-FFplay {
+    param(
+        [string[]]$Arguments,
+        [switch]$CopyStandardInput
+    )
+    if ($null -ne ($Arguments | Where-Object { $_ -match '[\s"]' })) {
+        throw 'internal FFplay argument was not safely encoded'
+    }
+    $process = $null
+    try {
+        $startInfo = [Diagnostics.ProcessStartInfo]::new()
+        $startInfo.FileName = Resolve-FFplay
+        $startInfo.Arguments = [string]::Join(' ', $Arguments)
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.RedirectStandardInput = $true
+        $process = [Diagnostics.Process]::new()
+        $process.StartInfo = $startInfo
+        if (-not $process.Start()) { throw 'ffplay.exe did not start' }
+        if ($CopyStandardInput) {
+            try {
+                [Console]::OpenStandardInput().CopyTo($process.StandardInput.BaseStream)
+            }
+            catch [IO.IOException] {
+                # FFplay can close its input first when it reports a playback error.
+            }
+        }
+        $process.StandardInput.Close()
+        $process.WaitForExit()
+        return $process.ExitCode
+    }
+    finally {
+        if ($null -ne $process) { $process.Dispose() }
+    }
+}
+
 function Parse-ReceiverOperation {
     param([string]$Command)
     $parts = @($Command -split ' ' | Where-Object { $_ -ne '' })
@@ -149,13 +185,12 @@ function Invoke-QuietTest {
         throw 'quiet test level is outside the approved range'
     }
 
-    $ffplay = Resolve-FFplay
     $amplitude = [Math]::Pow(10.0, $Dbfs / 20.0).ToString('0.00000000', [Globalization.CultureInfo]::InvariantCulture)
     $source = "aevalsrc=$amplitude*sin(2*PI*440*t):s=48000:d=$QuietDurationSeconds"
     $fadeOutStart = $QuietDurationSeconds - $QuietFadeSeconds
     $filter = "afade=t=in:st=0:d=$QuietFadeSeconds,afade=t=out:st=$fadeOutStart:d=$QuietFadeSeconds"
-    & $ffplay '-hide_banner' '-loglevel' 'error' '-nodisp' '-autoexit' '-f' 'lavfi' '-i' $source '-af' $filter '-t' "$QuietDurationSeconds"
-    if ($LASTEXITCODE -ne 0) {
+    $exitCode = Invoke-FFplay -Arguments @('-hide_banner', '-loglevel', 'error', '-nodisp', '-autoexit', '-f', 'lavfi', '-i', $source, '-af', $filter, '-t', "$QuietDurationSeconds")
+    if ($exitCode -ne 0) {
         throw 'quiet test playback failed'
     }
     Save-QuietLevel -Dbfs $Dbfs
@@ -251,9 +286,12 @@ try {
         'capabilities' { Write-Capabilities; exit 0 }
         'diagnostics' { Write-Diagnostics; exit 0 }
         'play' {
-            $ffplay = Resolve-FFplay
-            & $ffplay '-hide_banner' '-loglevel' 'warning' '-nodisp' '-autoexit' '-fflags' 'nobuffer' '-flags' 'low_delay' '-sync' 'ext' '-f' 'ogg' '-'
-            exit $LASTEXITCODE
+            $exitCode = Invoke-FFplay -Arguments @(
+                '-hide_banner', '-loglevel', 'warning', '-nodisp', '-autoexit',
+                '-fflags', 'nobuffer', '-flags', 'low_delay', '-sync', 'ext',
+                '-f', 'ogg', '-'
+            ) -CopyStandardInput
+            exit $exitCode
         }
         'quiet-test' { Invoke-QuietTest -Dbfs ([int]$request.dbfs); exit 0 }
         'remove' { Invoke-SelfRemoval; exit 0 }
