@@ -6,6 +6,7 @@ Read these first:
 
 - [Security policy](SECURITY.md)
 - [Security model and permissions](docs/security-model.md)
+- [Custom builds and downstream trust](docs/custom-builds.md)
 - [Domain vocabulary](CONTEXT.md)
 - [Secure public v1 specification](docs/specs/secure-public-v1.md)
 - [Real-device smoke procedures](docs/testing/smoke-tests.md)
@@ -50,6 +51,8 @@ Do not add someone else's sign-off, and do not rewrite a contributor's identity 
 - Do not commit a production release key, fabricated trust root, private development default, machine identifier, credential, or real diagnostic log.
 
 When a safe operation cannot complete, return a structured failure, preserve retry/rollback state where applicable, and report incomplete rollback or Pending Cleanup honestly.
+
+These are acceptance requirements for behavior contributed to the official project. They do not revoke the MIT license or restrict an owner-authorized downstream build; see [Custom builds and forks](docs/custom-builds.md). A downstream distribution must use distinct trust identity and must not present modified behavior as covered by upstream signatures.
 
 ## Tests and local checks
 
