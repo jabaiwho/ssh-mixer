@@ -63,6 +63,7 @@ Run the same portable checks as CI:
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest discover -s tests -v
 python3 scripts/check_repository.py
+python3 scripts/check_stream_latency.py
 python3 -m compileall -q -f bin src receiver tests scripts
 python3 -m json.tool manifest.json >/dev/null
 bash -n bin/cliamp-stream receiver/linux/setup-v1.sh

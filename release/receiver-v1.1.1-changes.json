@@ -1,0 +1,20 @@
+{
+  "linux/companion": [
+    "Report Companion 1.1.1 for the bounded-latency Receiver release."
+  ],
+  "linux/receiver": [
+    "Use FFplay external-clock synchronization to prevent source and Receiver audio clocks from accumulating latency."
+  ],
+  "windows/companion": [
+    "Report Companion 1.1.1 for the bounded-latency Receiver release."
+  ],
+  "windows/receiver": [
+    "Use FFplay external-clock synchronization to prevent wireless-output clock drift from accumulating latency."
+  ],
+  "macos/companion": [
+    "Experimental: report Companion 1.1.1 for the bounded-latency Receiver release."
+  ],
+  "macos/receiver": [
+    "Experimental: use FFplay external-clock synchronization while retaining realDeviceVerified false."
+  ]
+}

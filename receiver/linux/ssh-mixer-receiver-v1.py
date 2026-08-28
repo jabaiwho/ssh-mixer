@@ -24,7 +24,7 @@ from typing import NamedTuple
 PROTOCOL = "ssh-mixer-receiver"
 VERSION = "v1"
 PROTOCOL_VERSION = 1
-HELPER_VERSION = "1.1.0"
+HELPER_VERSION = "1.1.1"
 QUIET_START_DBFS = -40
 QUIET_MAX_DBFS = -24
 QUIET_STEP_DB = 4
@@ -159,6 +159,8 @@ def play() -> int:
             "nobuffer",
             "-flags",
             "low_delay",
+            "-sync",
+            "ext",
             "-f",
             "ogg",
             "-",

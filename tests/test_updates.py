@@ -45,14 +45,17 @@ def artifact(platform: str, kind: str, version: str, content: bytes) -> dict[str
 
 
 def metadata(platform: str, companion: bytes, receiver: bytes) -> bytes:
+    release_version = RECEIVER_VERSIONS[platform]
+    if COMPANION_VERSIONS[platform] != release_version:
+        raise AssertionError("test metadata requires one common artifact release version")
     value = {
         "schemaVersion": 1,
-        "releaseId": "receiver-v1.1.0+0123456789abcdef0123456789abcdef01234567",
-        "pluginVersion": "0.1.0",
+        "releaseId": f"receiver-v{release_version}+0123456789abcdef0123456789abcdef01234567",
+        "pluginVersion": PLUGIN_VERSION,
         "publishedAt": "2026-02-27T00:00:00Z",
         "artifacts": [
-            artifact(platform, "companion", "1.1.0", companion),
-            artifact(platform, "receiver", "1.1.0", receiver),
+            artifact(platform, "companion", release_version, companion),
+            artifact(platform, "receiver", release_version, receiver),
         ],
     }
     return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
@@ -102,11 +105,11 @@ class VersionRepresentationTest(unittest.TestCase):
         self.assertEqual(artifact_count, 6)
 
     def test_plugin_companion_receiver_and_protocol_versions_are_independent(self) -> None:
-        self.assertEqual(PLUGIN_VERSION, "0.1.0")
+        self.assertEqual(PLUGIN_VERSION, "0.1.1")
         self.assertEqual(PROTOCOL_VERSION, 1)
-        self.assertEqual(PINNED_RECEIVER_RELEASE, "1.1.0")
-        self.assertEqual(COMPANION_VERSIONS["linux"], "1.1.0")
-        self.assertEqual(RECEIVER_VERSIONS["windows"], "1.1.0")
+        self.assertEqual(PINNED_RECEIVER_RELEASE, "1.1.1")
+        self.assertEqual(COMPANION_VERSIONS["linux"], "1.1.1")
+        self.assertEqual(RECEIVER_VERSIONS["windows"], "1.1.1")
         self.assertNotEqual(PLUGIN_VERSION, RECEIVER_VERSIONS["macos"])
 
 
@@ -259,10 +262,10 @@ class UpdateServiceTest(unittest.TestCase):
             ),
             post_verify=post_verify
             or (
-                lambda _plan: {
+                lambda plan: {
                     "ok": True,
                     "platform": platform,
-                    "helperVersion": "1.1.0",
+                    "helperVersion": plan["target"]["receiver"],
                     "protocol": 1,
                 }
             ),
@@ -283,7 +286,7 @@ class UpdateServiceTest(unittest.TestCase):
         self.assertFalse(plan["required"])
         self.assertFalse(plan["automaticInstall"])
         self.assertEqual(plan["current"]["receiver"], "1.0.0")
-        self.assertEqual(plan["target"]["receiver"], "1.1.0")
+        self.assertEqual(plan["target"]["receiver"], RECEIVER_VERSIONS["linux"])
         self.assertTrue(plan["changes"])
 
     def test_incompatible_installed_helper_requires_guided_update(self) -> None:
@@ -486,10 +489,10 @@ class UpdateServiceTest(unittest.TestCase):
         service, signed, _artifacts = self.service(
             platform="macos",
             installer=installer,
-            post_verify=lambda _plan: calls.append("verify") or {
+            post_verify=lambda plan: calls.append("verify") or {
                 "ok": True,
                 "platform": "macos",
-                "helperVersion": "1.1.0",
+                "helperVersion": plan["target"]["receiver"],
                 "protocol": 1,
             },
             commit=lambda _plan: calls.append("commit") or {"ok": True, "complete": True},
@@ -516,10 +519,10 @@ class UpdateServiceTest(unittest.TestCase):
                 "ok": True,
                 "companionVersion": plan["target"]["companion"],
             },
-            post_verify=lambda _plan: calls.append("verify") or {
+            post_verify=lambda plan: calls.append("verify") or {
                 "ok": True,
                 "platform": "linux",
-                "helperVersion": "1.1.0",
+                "helperVersion": plan["target"]["receiver"],
                 "protocol": 1,
             },
             commit=lambda _plan: calls.append("commit") or {"ok": False, "complete": False},
@@ -588,7 +591,7 @@ class UpdateApplicationTest(unittest.TestCase):
         self.assertTrue(checked["ok"])
         self.assertEqual(checked["plan"]["status"], "update-available")
         self.assertTrue(applied["ok"])
-        self.assertEqual(fetches, ["1.1.0", "1.1.0"])
+        self.assertEqual(fetches, [PINNED_RECEIVER_RELEASE, PINNED_RECEIVER_RELEASE])
 
     def test_application_exposes_plan_then_requires_approval(self) -> None:
         service, signed, _artifacts = UpdateServiceTest().service()

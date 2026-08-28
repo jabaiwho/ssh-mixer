@@ -548,6 +548,17 @@ class ReceiverProtocolTest(unittest.TestCase):
             with self.assertRaises(self.receiver.ProtocolError):
                 self.receiver.parse_operation(command)
 
+    def test_playback_uses_external_clock_to_bound_receiver_drift(self) -> None:
+        with patch.object(self.receiver.shutil, "which", return_value="/usr/bin/ffplay"), patch.object(
+            self.receiver.os, "execv", side_effect=RuntimeError("exec captured")
+        ) as execute:
+            with self.assertRaisesRegex(RuntimeError, "exec captured"):
+                self.receiver.play()
+
+        command = execute.call_args.args[1]
+        self.assertEqual(command[command.index("-sync") + 1], "ext")
+        self.assertEqual(command[command.index("-f") + 1], "ogg")
+
     def test_quiet_test_is_short_faded_bounded_and_stepwise(self) -> None:
         settings = self.receiver.quiet_test_settings(-40, previous_dbfs=None)
         self.assertEqual(settings["dbfs"], -40)

@@ -130,7 +130,7 @@ Runtime updates require all of the following: a separately approved `release/all
 
 The production transaction uses native Bootstrap Authentication; the Managed Identity cannot replace executable code. Routine updates retain the prior helper and exact authorized-key file until helper/platform/protocol/restriction verification succeeds. They reject dependency, package, SSH service, firewall, or Remote Login changes in favor of a separate disclosed Companion Setup plan. Windows administrator-key ACLs may still require an explicitly displayed native UAC approval.
 
-This branch pins the reviewed public production trust root but has no published signed release, so runtime update installation remains fail-closed. A full-commit-pinned manual attestation workflow is present but has not been run; GitHub attestations are a publication gate described in [docs/releasing.md](releasing.md) and do not replace runtime signature or checksum checks.
+The source pins the reviewed public production trust root and one exact Receiver release version. Runtime update installation succeeds only when matching signed immutable metadata and artifacts exist; an unpublished, missing, changed, or incompatible pinned release fails closed. GitHub attestations remain a publication gate described in [the release process](releasing.md) and do not replace runtime signature or checksum checks.
 
 ## Threats addressed
 

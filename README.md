@@ -161,15 +161,15 @@ Receiver commands are not configurable shell text. Streaming, capability checks,
 
 ## Verified Receiver updates
 
-SSH-mixer versions the plugin (`0.1.0`), each platform's Companion Setup (`1.1.0`), each Receiver helper (`1.1.0`), and Receiver Protocol (`1`) independently. A compatible installed helper continues working; a newer compatible helper is optional, while an incompatible protocol fails with guidance rather than silently replacing anything.
+SSH-mixer versions the plugin (`0.1.1`), each platform's Companion Setup (`1.1.1`), each Receiver helper (`1.1.1`), and Receiver Protocol (`1`) independently. A compatible installed helper continues working; a newer compatible helper is optional, while an incompatible protocol fails with guidance rather than silently replacing anything.
 
 An update plan is accepted only from detached OpenSSH-signed release metadata using the `ssh-mixer-release` namespace and an explicitly reviewed `release/allowed_signers` trust root. The signed metadata binds a full source commit, immutable versioned GitHub release URLs, artifact sizes, SHA-256 checksums, protocol ranges, and the exact changes shown for approval. Metadata signatures are checked again immediately before download, and each downloaded artifact is staged privately and checked before an installer can run.
 
 Installation requires the exact reviewed plan hash. Post-update platform, helper-version, and protocol verification is mandatory; failure invokes the platform transaction rollback and reports whether the prior version was restored. Staging cleanup is also verified. Update code never uses Windows execution-policy bypasses, disables Gatekeeper, or clears macOS quarantine warnings.
 
-The release-specific production transaction uses native Bootstrap Authentication rather than expanding Managed Identity authority. It retains Receiver backups through post-update verification and commits or rolls back explicitly; dependency or system-service changes require a separate disclosed Companion Setup plan. The reviewed production trust root is committed, and the plugin pins signed Receiver release `1.1.0`. See [release/README.md](release/README.md) for the manual metadata/signing process. Creating an update plan never installs it, and applying a current or changed plan still requires exact approval.
+The release-specific production transaction uses native Bootstrap Authentication rather than expanding Managed Identity authority. It retains Receiver backups through post-update verification and commits or rolls back explicitly; dependency or system-service changes require a separate disclosed Companion Setup plan. The reviewed production trust root is committed, and this source pins Receiver release `1.1.1`; update operations fail closed until matching signed immutable metadata exists. See [release/README.md](release/README.md) for the manual metadata/signing process. Creating an update plan never installs it, and applying a current or changed plan still requires exact approval.
 
-The stream keeps 20 ms Opus frames and flushes each frame as an Ogg page instead of using FFmpeg's one-second page default. Audio coding stays at the configured bitrate; the lower latency costs roughly 11 kbps of additional Ogg framing overhead.
+The stream keeps 10 ms Opus frames, flushes each frame as an Ogg page, and makes FFplay follow its external monotonic clock so long-running source and Receiver clock differences are corrected instead of accumulating playback delay. Audio coding stays at the configured bitrate; the lower framing latency costs roughly 22 kbps of additional Ogg overhead.
 
 ## Troubleshooting
 

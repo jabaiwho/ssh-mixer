@@ -174,6 +174,10 @@ class WindowsSetupTest(unittest.TestCase):
             with self.assertRaises(SetupError):
                 parse_receiver_operation(command)
 
+    def test_receiver_playback_uses_external_clock_to_bound_drift(self) -> None:
+        receiver = RECEIVER_PATH.read_text(encoding="utf-8")
+        self.assertIn("'-flags' 'low_delay' '-sync' 'ext' '-f' 'ogg'", receiver)
+
     def test_receiver_quiet_test_is_fixed_bounded_faded_and_non_elevated(self) -> None:
         receiver = RECEIVER_PATH.read_text(encoding="utf-8")
         self.assertIn("$QuietStartDbfs = -40", receiver)

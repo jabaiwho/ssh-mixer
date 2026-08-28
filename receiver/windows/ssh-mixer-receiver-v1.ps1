@@ -8,7 +8,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $Protocol = 'v1'
 $ProtocolVersion = 1
-$HelperVersion = '1.1.0'
+$HelperVersion = '1.1.1'
 $QuietStartDbfs = -40
 $QuietMaximumDbfs = -24
 $QuietStepDb = 4
@@ -220,7 +220,7 @@ try {
         'diagnostics' { Write-Diagnostics; exit 0 }
         'play' {
             $ffplay = Resolve-FFplay
-            & $ffplay '-hide_banner' '-loglevel' 'warning' '-nodisp' '-autoexit' '-fflags' 'nobuffer' '-flags' 'low_delay' '-f' 'ogg' '-'
+            & $ffplay '-hide_banner' '-loglevel' 'warning' '-nodisp' '-autoexit' '-fflags' 'nobuffer' '-flags' 'low_delay' '-sync' 'ext' '-f' 'ogg' '-'
             exit $LASTEXITCODE
         }
         'quiet-test' { Invoke-QuietTest -Dbfs ([int]$request.dbfs); exit 0 }
