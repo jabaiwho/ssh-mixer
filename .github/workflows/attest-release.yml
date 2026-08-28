@@ -14,7 +14,7 @@ permissions:
   attestations: write
 
 concurrency:
-  group: receiver-v1.1.0-attestation
+  group: receiver-attestation-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -24,6 +24,12 @@ jobs:
     steps:
       - name: Check out the exact reviewed commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Resolve the reviewed Receiver release
+        id: receiver-release
+        run: |
+          version="$(PYTHONPATH=src python3 -c 'from ssh_mixer.versions import PINNED_RECEIVER_RELEASE; print(PINNED_RECEIVER_RELEASE)')"
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
 
       - name: Require protected main and validate the repository
         env:
@@ -38,29 +44,30 @@ jobs:
       - name: Build immutable unsigned artifacts and metadata
         env:
           PUBLISHED_AT: ${{ inputs.published_at }}
+          RECEIVER_VERSION: ${{ steps.receiver-release.outputs.version }}
         run: |
           mkdir -p dist/artifacts
           python3 scripts/build_release_metadata.py \
-            --version 1.1.0 \
+            --version "$RECEIVER_VERSION" \
             --commit "$GITHUB_SHA" \
             --published-at "$PUBLISHED_AT" \
-            --changes release/receiver-v1.1.0-changes.json \
-            --output dist/receiver-v1.1.0.json \
+            --changes "release/receiver-v${RECEIVER_VERSION}-changes.json" \
+            --output "dist/receiver-v${RECEIVER_VERSION}.json" \
             --artifact-dir dist/artifacts
-          (cd dist && sha256sum receiver-v1.1.0.json artifacts/* > SHA256SUMS)
+          (cd dist && sha256sum "receiver-v${RECEIVER_VERSION}.json" artifacts/* > SHA256SUMS)
 
       - name: Attest every built subject
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
-            dist/receiver-v1.1.0.json
+            dist/receiver-v${{ steps.receiver-release.outputs.version }}.json
             dist/SHA256SUMS
             dist/artifacts/*
 
       - name: Retain exact unsigned subjects for offline signing review
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: receiver-v1.1.0-unsigned-${{ github.sha }}
+          name: receiver-v${{ steps.receiver-release.outputs.version }}-unsigned-${{ github.sha }}
           path: dist/
           if-no-files-found: error
           retention-days: 7

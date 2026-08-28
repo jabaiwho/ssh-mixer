@@ -230,6 +230,11 @@ def check_update_versions(errors: list[str]) -> None:
     )
     plugin_match = re.search(r'^PLUGIN_VERSION = "([0-9]+\.[0-9]+\.[0-9]+)"$', versions_text, re.MULTILINE)
     protocol_match = re.search(r"^PROTOCOL_VERSION = ([0-9]+)$", versions_text, re.MULTILINE)
+    pinned_release_match = re.search(
+        r'^PINNED_RECEIVER_RELEASE = "([0-9]+\.[0-9]+\.[0-9]+)"$',
+        versions_text,
+        re.MULTILINE,
+    )
     manifest = json.loads((ROOT / "manifest.json").read_text(encoding="utf-8"))
     if plugin_match is None or manifest.get("version") != plugin_match.group(1):
         errors.append("manifest and plugin versions are not synchronized")
@@ -251,6 +256,25 @@ def check_update_versions(errors: list[str]) -> None:
     for relative, marker in expected_markers.items():
         if marker not in (ROOT / relative).read_text(encoding="utf-8"):
             errors.append(f"{relative}: missing independent component version: {marker}")
+    if pinned_release_match is None:
+        errors.append("pinned Receiver release version is missing")
+    else:
+        pinned_release = pinned_release_match.group(1)
+        if not (ROOT / "release" / f"receiver-v{pinned_release}-changes.json").is_file():
+            errors.append("pinned Receiver release change description is missing")
+    attestation_workflow = (
+        ROOT / ".github" / "workflows" / "attest-release.yml"
+    ).read_text(encoding="utf-8")
+    for required in (
+        "PINNED_RECEIVER_RELEASE",
+        'release/receiver-v${RECEIVER_VERSION}-changes.json',
+        'receiver-v${{ steps.receiver-release.outputs.version }}.json',
+    ):
+        if required not in attestation_workflow:
+            errors.append(
+                "release attestation workflow does not derive artifacts from the pinned Receiver release"
+            )
+            break
     trust_root = ROOT / "release" / "allowed_signers"
     if trust_root.exists():
         text = trust_root.read_text(encoding="utf-8")
