@@ -181,7 +181,18 @@ class WindowsSetupTest(unittest.TestCase):
 
     def test_receiver_playback_uses_external_clock_for_continuous_correction(self) -> None:
         receiver = RECEIVER_PATH.read_text(encoding="utf-8")
-        self.assertIn("'-flags' 'low_delay' '-sync' 'ext' '-f' 'ogg'", receiver)
+        self.assertIn("'-flags', 'low_delay', '-sync', 'ext'", receiver)
+        self.assertIn("'-f', 'ogg', '-'", receiver)
+
+    def test_receiver_copies_binary_stdin_to_a_direct_headless_ffplay_process(self) -> None:
+        receiver = RECEIVER_PATH.read_text(encoding="utf-8")
+        self.assertIn("function Invoke-FFplay", receiver)
+        self.assertIn("$startInfo.UseShellExecute = $false", receiver)
+        self.assertIn("$startInfo.CreateNoWindow = $true", receiver)
+        self.assertIn("$startInfo.RedirectStandardInput = $true", receiver)
+        self.assertIn("[Console]::OpenStandardInput().CopyTo($process.StandardInput.BaseStream)", receiver)
+        self.assertIn("Invoke-FFplay -Arguments @(", receiver)
+        self.assertNotIn("& $ffplay", receiver)
 
     def test_setup_and_receiver_reject_unusable_ffplay_application_aliases(self) -> None:
         setup = SETUP_PATH.read_text(encoding="utf-8")
