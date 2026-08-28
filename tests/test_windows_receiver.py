@@ -216,10 +216,10 @@ class WindowsSetupTest(unittest.TestCase):
                 "firewallRule": True,
                 "ffplay": True,
                 "winget": True,
-                "administratorCapable": False,
-                "elevated": False,
+                "administratorCapable": True,
+                "elevated": True,
             },
-            administrator_confirmed=False,
+            administrator_confirmed=True,
         )
 
         for marker in ("rolled-back", "no-changes-applied"):
@@ -234,6 +234,7 @@ class WindowsSetupTest(unittest.TestCase):
                     if ssh_calls == 1:
                         return subprocess.CompletedProcess(command, 0, staging, "")
                     if ssh_calls == 2:
+                        noninteractive = "-T" in command and "-tt" not in command
                         captured = (
                             json.dumps(
                                 {
@@ -243,10 +244,13 @@ class WindowsSetupTest(unittest.TestCase):
                                 },
                                 separators=(",", ":"),
                             )
-                            if kwargs.get("stderr") == subprocess.STDOUT
+                            if noninteractive
+                            and kwargs.get("stderr") == subprocess.STDOUT
                             else ""
                         )
-                        return subprocess.CompletedProcess(command, 0, captured, "")
+                        return subprocess.CompletedProcess(
+                            command, 1 if noninteractive else 0, captured, ""
+                        )
                     return subprocess.CompletedProcess(command, 0, "", "")
 
                 public_key = Path(temp) / "id_ed25519.pub"
@@ -388,6 +392,95 @@ class WindowsApplicationTest(unittest.TestCase):
         self.assertEqual(
             completed["config"]["connection"]["receiverPlatform"], "windows"
         )
+
+    def test_privileged_setup_requires_an_already_elevated_bootstrap(self) -> None:
+        from ssh_mixer.application import MixerApplication
+        from ssh_mixer.diagnostics import DiagnosticStore
+
+        class Bootstrap:
+            def probe(self):
+                return {
+                    "platform": "windows",
+                    "user": "listener",
+                    "profile": "C:\\Users\\listener",
+                    "openSshVersion": "9.5.0.0",
+                    "sshdInstalled": True,
+                    "sshdRunning": True,
+                    "firewallRule": True,
+                    "ffplay": True,
+                    "winget": True,
+                    "administratorCapable": True,
+                    "elevated": False,
+                }
+
+            def apply(self, _plan, _identity):
+                return {"ok": True}
+
+            def verify(self, _plan, _identity):
+                return {"ok": True}
+
+            def rollback(self, _plan, _identity):
+                return {"ok": True, "complete": True}
+
+        generated: list[bool] = []
+
+        def keygen(command: list[str], **_kwargs: object):
+            generated.append(True)
+            key_path = Path(command[command.index("-f") + 1])
+            key_path.write_text("private", encoding="utf-8")
+            key_path.with_suffix(".pub").write_text(
+                "ssh-ed25519 AAAATEST ssh-mixer", encoding="utf-8"
+            )
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        connection = {
+            "type": "direct",
+            "host": "windows.example",
+            "user": "listener",
+            "port": 22,
+        }
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(Path(temp) / "config"),
+                "XDG_DATA_HOME": str(Path(temp) / "data"),
+                "XDG_STATE_HOME": str(Path(temp) / "state"),
+                "XDG_RUNTIME_DIR": str(Path(temp) / "runtime"),
+            },
+            clear=False,
+        ):
+            app = MixerApplication(
+                windows_bootstrap_factory=lambda _connection, _address: Bootstrap(),
+                identity_store=ManagedIdentityStore(Path(temp) / "keys", runner=keygen),
+                diagnostic_store=DiagnosticStore(Path(temp) / "logs"),
+            )
+            planned = app.execute(
+                {
+                    "operation": "receiver.windows-plan",
+                    "payload": {
+                        "connection": connection,
+                        "administratorConfirmed": True,
+                    },
+                }
+            )
+            blocked = app.execute(
+                {
+                    "operation": "receiver.windows-setup",
+                    "payload": {
+                        "connection": connection,
+                        "changesApproved": True,
+                        "administratorConfirmed": True,
+                        "approvedPlanHash": planned["plan"]["planHash"],
+                        "encryptedIdentity": False,
+                    },
+                }
+            )
+
+        self.assertFalse(blocked["ok"])
+        self.assertEqual(
+            blocked["diagnostic"]["code"], "elevated-bootstrap-required"
+        )
+        self.assertEqual(generated, [])
 
 
 if __name__ == "__main__":

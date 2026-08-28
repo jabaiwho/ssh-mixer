@@ -116,7 +116,7 @@ Choose **Plan Windows Receiver** for a Microsoft OpenSSH receiver. The no-change
 - apply and verify the documented standard-user or administrator-key ACL; and
 - verify non-elevated runtime, protocol capability, arbitrary-command rejection, and forwarding rejection.
 
-Administrator-capable accounts are disclosed and require separate confirmation. Setup may use an approved elevated bootstrap session for system changes, but the installed Receiver Protocol refuses an elevated runtime token. Windows security prompts and warnings are never bypassed. Setup restores prior files, ACLs, packages, capabilities, and firewall state where safe; any state it cannot restore is reported as an incomplete rollback.
+Administrator-capable accounts are disclosed and require separate confirmation. Fixed PowerShell setup runs noninteractively over SSH without a PTY; if an approved plan requires privilege but Bootstrap Authentication is not already elevated, setup stops before generating a Managed Identity. The installed Receiver Protocol refuses an elevated runtime token. Windows security prompts and warnings are never bypassed. Setup restores prior files, ACLs, packages, capabilities, and firewall state where safe; any state it cannot restore is reported as an incomplete rollback.
 
 ## Experimental macOS Receiver setup
 

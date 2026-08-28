@@ -814,6 +814,18 @@ class MixerApplication:
                     stage="receiver.windows-setup",
                     code="plan-changed",
                 )
+            if (
+                any(
+                    change.get("requiresPrivilege") is True
+                    for change in plan.get("changes", [])
+                )
+                and plan.get("bootstrapElevated") is not True
+            ):
+                return self._error(
+                    "Windows privileged changes require elevated Bootstrap Authentication",
+                    stage="receiver.windows-setup",
+                    code="elevated-bootstrap-required",
+                )
             identity_id = connection_id(connection)
             identity = self._identity_store().generate(
                 identity_id,
