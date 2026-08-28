@@ -152,7 +152,7 @@ Use **Clear diagnostics** to delete retained events immediately. **Contribute a 
 
 ## Updates
 
-Creating an update plan never installs anything. This source pins Receiver release `1.1.1`; a missing, unpublished, changed, invalid, or incompatible signed immutable release fails closed before installation.
+Creating an update plan never installs anything. This source pins Receiver release `1.1.1`; a missing, unpublished, changed, invalid, or incompatible signed immutable release fails closed before installation. The 10 ms source cadence applies with an older compatible Protocol-v1 helper, but external-clock drift correction requires Receiver 1.1.1. Receiver 1.1.0 is not silently replaced; use manual Refresh as its recovery path until you separately approve the signed update.
 
 When configured, **Check signed Receiver update** verifies the plugin-pinned metadata signature, checks current Receiver capabilities, and displays exact component, native-authentication, privilege, and rollback changes. The Managed Identity cannot update executable code. After unchanged plan-hash approval, SSH-mixer uses native OpenSSH authentication, verifies immutable URL scope, byte size, and SHA-256, retains protected Receiver backups, runs the signed Companion Setup, verifies platform, helper version, protocol compatibility, restrictions, and non-elevated runtime, then commits. Failure restores the prior helper and exact authorized-key file and reports incomplete rollback honestly. Private source staging is also verified removed.
 
