@@ -73,7 +73,7 @@ The panel offers three exact-plan choices:
 - **Keep user-managed** requires the same host-fingerprint review, then retains the legacy receiver and identity path with a persistent weaker-permissions label while replacing arbitrary commands with Receiver Protocol v1 and discarding unsafe temporary source IDs.
 - **Start fresh** removes receiver, identity-path, command, and source choices and returns to the generic public defaults.
 
-Every choice requires its unchanged plan hash. The exact prior file is kept as a protected `0600` backup throughout execution. A failure restores it byte-for-byte, retains the backup, and reports the failed stage and rollback status. The backup is removed only after the new schema, Receiver Protocol command, source state, and selected identity policy verify successfully.
+Every choice requires its unchanged plan hash. The exact prior file is kept as a protected `0600` backup throughout execution. A failure restores it byte-for-byte, retains the backup, and reports the failed stage and rollback status. A nested Companion Setup rollback cannot be promoted to migration success or masked as complete; incomplete status retains the required local and Receiver cleanup. The backup is removed only after the new schema, Receiver Protocol command, source state, and selected identity policy verify successfully.
 
 ## Verified removal and uninstall
 

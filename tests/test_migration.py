@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,6 +13,7 @@ from ssh_mixer.application import MixerApplication
 from ssh_mixer.config import config_path, load_config, secure_write_text
 from ssh_mixer.connections import TrustStore
 from ssh_mixer.diagnostics import DiagnosticStore
+from ssh_mixer.identity import ManagedIdentityStore
 from ssh_mixer.migration import MigrationService
 from ssh_mixer.session import SessionError, require_migration_complete
 
@@ -140,6 +142,100 @@ class MigrationServiceTest(unittest.TestCase):
         self.assertFalse(blocked["ok"])
         self.assertEqual(blocked["diagnostic"]["code"], "trust-required")
         self.assertEqual(unchanged, original)
+
+    def test_application_preserves_incomplete_companion_setup_rollback(self) -> None:
+        encoded = base64.b64encode(b"migration-host-key").decode("ascii")
+        host_key = f"[legacy-receiver.example]:2222 ssh-ed25519 {encoded}"
+
+        class Bootstrap:
+            def probe(self):
+                return {
+                    "platform": "windows",
+                    "user": "listener",
+                    "profile": "C:\\Users\\listener",
+                    "openSshVersion": "9.5.0.0",
+                    "sshdInstalled": True,
+                    "sshdRunning": True,
+                    "firewallRule": True,
+                    "ffplay": True,
+                    "winget": True,
+                    "administratorCapable": False,
+                    "elevated": False,
+                }
+
+            def apply(self, _plan, _identity):
+                return {"ok": True}
+
+            def verify(self, _plan, _identity):
+                return {"ok": False, "error": "restriction verification failed"}
+
+            def rollback(self, _plan, _identity):
+                return {"ok": False, "complete": False}
+
+        def keygen(command: list[str], **_kwargs: object):
+            key_path = Path(command[command.index("-f") + 1])
+            key_path.write_text("private", encoding="utf-8")
+            key_path.with_suffix(".pub").write_text(
+                "ssh-ed25519 AAAATEST ssh-mixer", encoding="utf-8"
+            )
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        with tempfile.TemporaryDirectory() as temp, self.environment(temp):
+            original = self.seed()
+            trust = TrustStore(Path(temp) / "trust")
+            app = MixerApplication(
+                read_status=lambda: {"state": "stopped", "active": False},
+                scan_host_keys=lambda *_args, **_kwargs: [host_key],
+                trust_store=trust,
+                windows_bootstrap_factory=lambda _connection, _address: Bootstrap(),
+                identity_store=ManagedIdentityStore(Path(temp) / "keys", runner=keygen),
+                diagnostic_store=DiagnosticStore(Path(temp) / "logs"),
+            )
+            connection = app.execute({"operation": "migration.connection"})["connection"]
+            trust.approve(connection, [host_key])
+            migration_plan = app.execute(
+                {
+                    "operation": "migration.plan",
+                    "payload": {"choice": "import-secure", "platform": "windows"},
+                }
+            )["plan"]
+            setup_plan = app.execute(
+                {
+                    "operation": "receiver.windows-plan",
+                    "payload": {
+                        "connection": connection,
+                        "administratorConfirmed": False,
+                    },
+                }
+            )["plan"]
+            failed = app.execute(
+                {
+                    "operation": "migration.apply",
+                    "payload": {
+                        "plan": migration_plan,
+                        "approvedPlanHash": migration_plan["planHash"],
+                        "setupPayload": {
+                            "changesApproved": True,
+                            "administratorConfirmed": False,
+                            "encryptedIdentity": False,
+                            "approvedPlanHash": setup_plan["planHash"],
+                        },
+                    },
+                }
+            )
+            restored = config_path().read_text(encoding="utf-8")
+            backup = config_path().parent / "legacy-backup.json"
+            retained_backup = backup.read_text(encoding="utf-8")
+            backup_mode = backup.stat().st_mode & 0o777
+
+        self.assertFalse(failed["ok"])
+        self.assertEqual(failed["diagnostic"]["code"], "rollback-incomplete")
+        self.assertTrue(failed["migration"]["rollbackIncomplete"])
+        self.assertTrue(failed["migration"]["remoteCleanupRequired"])
+        self.assertTrue(failed["migration"]["managedIdentityCleanupRequired"])
+        self.assertEqual(restored, original)
+        self.assertEqual(retained_backup, original)
+        self.assertEqual(backup_mode, 0o600)
 
     def test_detects_legacy_reasons_without_returning_or_logging_values(self) -> None:
         with tempfile.TemporaryDirectory() as temp, self.environment(temp):

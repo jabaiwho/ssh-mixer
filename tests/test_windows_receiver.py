@@ -8,7 +8,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ssh_mixer.identity import ManagedIdentityStore
-from ssh_mixer.windows_bootstrap import WINDOWS_STAGING_RE, WINDOWS_TRANSACTION_RE
+from ssh_mixer.windows_bootstrap import (
+    WINDOWS_STAGING_RE,
+    WINDOWS_TRANSACTION_RE,
+    WindowsBootstrap,
+)
 from ssh_mixer.windows_setup import (
     SetupError,
     WindowsSetupTracer,
@@ -188,6 +192,65 @@ class WindowsSetupTest(unittest.TestCase):
         self.assertIn("Assert-NonElevated", receiver)
         self.assertNotIn("Set-AudioDevice", receiver)
         self.assertNotIn("Invoke-Expression", receiver)
+
+    def test_bootstrap_preserves_complete_remote_rollback_marker(self) -> None:
+        connection = {
+            "type": "direct",
+            "host": "windows.example",
+            "user": "listener",
+            "port": 22,
+        }
+        staging = (
+            "C:\\Users\\listener\\AppData\\Local\\Temp\\"
+            "ssh-mixer-setup-0123456789abcdef0123456789abcdef"
+        )
+        ssh_calls = 0
+
+        def runner(command: list[str], **kwargs: object):
+            nonlocal ssh_calls
+            if command[0] == "scp":
+                return subprocess.CompletedProcess(command, 0, "", "")
+            ssh_calls += 1
+            if ssh_calls == 1:
+                return subprocess.CompletedProcess(command, 0, staging, "")
+            if ssh_calls == 2:
+                captured = (
+                    '{"schemaVersion":1,"ok":false,"code":"rolled-back"}'
+                    if kwargs.get("stderr") == subprocess.STDOUT
+                    else ""
+                )
+                return subprocess.CompletedProcess(command, 0, captured, "")
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        with tempfile.TemporaryDirectory() as temp:
+            public_key = Path(temp) / "id_ed25519.pub"
+            public_key.write_text("ssh-ed25519 AAAATEST ssh-mixer\n", encoding="utf-8")
+            plan = build_windows_plan(
+                {
+                    "platform": "windows",
+                    "user": "listener",
+                    "profile": "C:\\Users\\listener",
+                    "openSshVersion": "9.5.0.0",
+                    "sshdInstalled": True,
+                    "sshdRunning": True,
+                    "firewallRule": True,
+                    "ffplay": True,
+                    "winget": True,
+                    "administratorCapable": False,
+                    "elevated": False,
+                },
+                administrator_confirmed=False,
+            )
+            bootstrap = WindowsBootstrap(
+                connection,
+                known_hosts=Path(temp) / "known_hosts",
+                runner=runner,
+            )
+            with self.assertRaises(ValueError):
+                bootstrap.apply(plan, {"publicKeyPath": str(public_key)})
+            rollback = bootstrap.rollback(plan, {})
+
+        self.assertEqual(rollback, {"ok": True, "complete": True})
 
     def test_tracer_reports_structured_incomplete_rollback(self) -> None:
         calls: list[str] = []

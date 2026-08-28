@@ -269,12 +269,19 @@ class MixerApplication:
                     self._migration_bootstrap_key_path = ""
                     self._migration_in_progress = False
                 if not setup.get("ok"):
+                    setup_result = (
+                        setup.get("setup", {})
+                        if isinstance(setup.get("setup"), dict)
+                        else {}
+                    )
                     return {
                         "ok": False,
                         "verified": False,
                         "stage": setup.get("diagnostic", {}).get(
                             "stage", f"receiver.{platform}-setup"
                         ),
+                        "rollbackIncomplete": setup_result.get("rollbackIncomplete")
+                        is True,
                     }
                 setup_result = setup.get("setup", {})
                 return {

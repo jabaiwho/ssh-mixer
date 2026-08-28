@@ -254,6 +254,7 @@ class MigrationService:
                     internal_setup_payload,
                 )
                 if imported.get("ok") is not True or imported.get("verified") is not True:
+                    secure_changes_committed = imported.get("rollbackIncomplete") is True
                     stage = str(imported.get("stage", "receiver.verify"))
                     raise MigrationError("Managed Identity setup or verification failed")
                 secure_changes_committed = True

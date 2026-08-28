@@ -188,13 +188,14 @@ class WindowsBootstrap(LinuxBootstrap):
                 [*self._ssh(tty=requires_tty), _encoded_powershell(apply_script)],
                 check=False,
                 stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
             )
+            self._apply_rolled_back = (
+                '"code":"rolled-back"' in applied.stdout
+                and "Rollback-Incomplete" not in applied.stdout
+            )
             if applied.returncode != 0:
-                self._apply_rolled_back = (
-                    '"code":"rolled-back"' in applied.stdout
-                    and "Rollback-Incomplete" not in applied.stdout
-                )
                 raise SetupError("Windows Companion Setup failed and rollback status was reported")
             lines = [line.strip() for line in applied.stdout.splitlines() if line.strip().startswith("{")]
             result = json.loads(lines[-1]) if lines else {}
