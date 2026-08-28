@@ -11,6 +11,8 @@ from unittest.mock import Mock, patch
 from ssh_mixer.config import DEFAULT_RECEIVER_COMMAND, config_from_payload, lock_path, state_path
 from ssh_mixer.diagnostics import DiagnosticStore
 from ssh_mixer.session import (
+    SessionError,
+    SessionWorker,
     cleanup_resources,
     process_identity,
     process_matches_identity,
@@ -26,6 +28,134 @@ import ssh_mixer.session as session_module
 
 
 class SessionSecurityTest(unittest.TestCase):
+    def test_stream_pipeline_processes_are_detached_and_headless(self) -> None:
+        ffmpeg = Mock(pid=10, stdout=Mock(), stderr=Mock())
+        ssh = Mock(pid=11)
+        resolved = {
+            "bitrate": "128k",
+            "receiverCommand": DEFAULT_RECEIVER_COMMAND,
+        }
+
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {"XDG_STATE_HOME": str(Path(temp) / "state")},
+            clear=False,
+        ):
+            worker = SessionWorker({}, "test-session")
+            with patch("ssh_mixer.session.require_commands"), patch(
+                "ssh_mixer.session.resolve_remote", return_value=resolved
+            ), patch(
+                "ssh_mixer.session.ssh_base_command", return_value=["ssh"]
+            ), patch(
+                "ssh_mixer.session.os.set_blocking"
+            ), patch(
+                "ssh_mixer.session.process_identity",
+                side_effect=[
+                    {"pid": 10, "startTimeTicks": "1", "executable": "/usr/bin/ffmpeg"},
+                    {"pid": 11, "startTimeTicks": "2", "executable": "/usr/bin/ssh"},
+                ],
+            ), patch(
+                "ssh_mixer.session.subprocess.Popen", side_effect=[ffmpeg, ssh]
+            ) as popen:
+                worker._start_pipeline("mix.monitor", {})
+
+        encoder_launch = popen.call_args_list[0]
+        transport_launch = popen.call_args_list[1]
+        self.assertIs(encoder_launch.kwargs["stdin"], subprocess.DEVNULL)
+        self.assertIs(encoder_launch.kwargs["stdout"], subprocess.PIPE)
+        self.assertIs(encoder_launch.kwargs["stderr"], subprocess.PIPE)
+        self.assertTrue(encoder_launch.kwargs["start_new_session"])
+        self.assertIs(transport_launch.kwargs["stdout"], subprocess.DEVNULL)
+        self.assertIs(transport_launch.kwargs["stderr"], subprocess.DEVNULL)
+        self.assertTrue(transport_launch.kwargs["start_new_session"])
+        self.assertNotIn("shell", encoder_launch.kwargs)
+        self.assertNotIn("shell", transport_launch.kwargs)
+
+    def test_failed_refresh_never_records_replacement_as_complete(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {"XDG_STATE_HOME": str(Path(temp) / "state")},
+            clear=False,
+        ):
+            worker = SessionWorker({}, "test-session")
+            worker.diagnostics.record = Mock()
+            with patch.object(
+                worker,
+                "_start_pipeline",
+                side_effect=SessionError("replacement failed"),
+            ), patch.object(
+                worker, "_wait_for_pipeline", return_value=(0, "", "deadline")
+            ), patch.object(worker, "_terminate_children"), patch.object(
+                worker, "_forget_pipeline_processes"
+            ):
+                with self.assertRaisesRegex(SessionError, "replacement failed"):
+                    worker._run_pipeline_epochs("mix.monitor", {})
+
+        codes = [call.kwargs["code"] for call in worker.diagnostics.record.call_args_list]
+        self.assertEqual(codes, ["refresh-deadline-starting"])
+
+    def test_failed_replacement_launch_terminates_the_partial_pipeline(self) -> None:
+        worker = SessionWorker({}, "test-session")
+        ffmpeg = Mock(pid=10, stdout=Mock(), stderr=Mock())
+        ffmpeg.poll.return_value = None
+        resolved = {
+            "bitrate": "128k",
+            "receiverCommand": DEFAULT_RECEIVER_COMMAND,
+        }
+
+        with patch("ssh_mixer.session.require_commands"), patch(
+            "ssh_mixer.session.resolve_remote", return_value=resolved
+        ), patch("ssh_mixer.session.ssh_base_command", return_value=["ssh"]), patch(
+            "ssh_mixer.session.os.set_blocking"
+        ), patch(
+            "ssh_mixer.session.subprocess.Popen",
+            side_effect=[ffmpeg, OSError("replacement failed")],
+        ), patch("ssh_mixer.session.kill_process_group") as kill:
+            with self.assertRaisesRegex(OSError, "replacement failed"):
+                worker._start_pipeline("mix.monitor", {})
+
+        kill.assert_called_once_with(10, session_module.signal.SIGTERM)
+
+    def test_session_requests_refresh_when_silence_follows_fifteen_minutes(self) -> None:
+        worker = SessionWorker({}, "test-session")
+        ffmpeg = Mock(pid=10, stderr=object())
+        ffmpeg.poll.side_effect = [None, 0]
+        ssh = Mock(pid=11)
+        ssh.poll.return_value = None
+        worker.children = [ffmpeg, ssh]
+
+        with patch(
+            "ssh_mixer.session.read_encoder_diagnostics",
+            return_value="[silencedetect] silence_start: 12.5\n",
+            create=True,
+        ), patch("ssh_mixer.session.time.monotonic", side_effect=[100.0, 1_000.0]), patch(
+            "ssh_mixer.session.time.sleep"
+        ):
+            result = worker._wait_for_pipeline()
+
+        self.assertEqual(result, (0, "", "silence"))
+
+    def test_qualifying_silence_is_not_missed_when_audio_resumes_between_polls(self) -> None:
+        worker = SessionWorker({}, "test-session")
+        ffmpeg = Mock(pid=10, stderr=object())
+        ffmpeg.poll.side_effect = [None, 0]
+        ssh = Mock(pid=11)
+        ssh.poll.return_value = None
+        worker.children = [ffmpeg, ssh]
+        events = (
+            "[silencedetect] silence_start: 12.5\n"
+            "[silencedetect] silence_end: 13.6 | silence_duration: 1.1\n"
+        )
+
+        with patch(
+            "ssh_mixer.session.read_encoder_diagnostics", return_value=events
+        ), patch("ssh_mixer.session.time.monotonic", side_effect=[100.0, 1_000.0]), patch(
+            "ssh_mixer.session.time.sleep"
+        ):
+            result = worker._wait_for_pipeline()
+
+        self.assertEqual(result, (0, "", "silence"))
+
     def test_cleanup_changes_only_resources_still_owned_by_the_session(self) -> None:
         calls: list[list[str]] = []
 

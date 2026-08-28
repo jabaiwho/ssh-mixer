@@ -100,6 +100,8 @@ Route Modes:
 
 Capture is never looped into local speakers by SSH-mixer. Changing Source selection or Route Mode during an active Session performs an explicit stop/restart transition from the panel; it does not create an automatic future resume.
 
+For SSH and Both, one explicitly started Session may contain multiple bounded Stream Epochs. After 15 minutes, SSH-mixer waits for at least one second below -50 dBFS and then recreates only FFmpeg, SSH, and Receiver playback. It performs the same refresh at 30 minutes even without silence. Source selection, routing, active indication, and lifecycle consent remain in place, while remote output may have a brief gap. The sequential replacement runs without a terminal, display, notification, focus change, or overlapping playback pipeline. Process creation and the SSH handshake have a brief unavoidable resource cost. Silence detection runs inside the existing encoder rather than as another process; it adds a small continuous scan cost rather than a second background pipeline. Failure to create the replacement stops visibly instead of retrying or falling back silently.
+
 ## Quiet test
 
 The quiet test is optional and never changes system volume:
@@ -152,7 +154,7 @@ Use **Clear diagnostics** to delete retained events immediately. **Contribute a 
 
 ## Updates
 
-Creating an update plan never installs anything. This source pins Receiver release `1.1.1`; a missing, unpublished, changed, invalid, or incompatible signed immutable release fails closed before installation. The 10 ms source cadence applies with an older compatible Protocol-v1 helper, but external-clock drift correction requires Receiver 1.1.1. Receiver 1.1.0 is not silently replaced; use manual Refresh as its recovery path until you separately approve the signed update.
+Creating an update plan never installs anything. This source pins Receiver release `1.1.1`; a missing, unpublished, changed, invalid, or incompatible signed immutable release fails closed before installation. Plugin 0.1.1 applies the 10 ms source cadence and bounded Stream Epochs with an older compatible Protocol-v1 helper, while external-clock correction within each epoch requires Receiver 1.1.1. Receiver 1.1.0 is not silently replaced, and its separately approved update adds continuous correction rather than enabling the epoch policy.
 
 When configured, **Check signed Receiver update** verifies the plugin-pinned metadata signature, checks current Receiver capabilities, and displays exact component, native-authentication, privilege, and rollback changes. The Managed Identity cannot update executable code. After unchanged plan-hash approval, SSH-mixer uses native OpenSSH authentication, verifies immutable URL scope, byte size, and SHA-256, retains protected Receiver backups, runs the signed Companion Setup, verifies platform, helper version, protocol compatibility, restrictions, and non-elevated runtime, then commits. Failure restores the prior helper and exact authorized-key file and reports incomplete rollback honestly. Private source staging is also verified removed.
 

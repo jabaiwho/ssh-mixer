@@ -80,6 +80,10 @@ _Avoid_: Stream config
 The fixed Opus-frame, Ogg-page, and Receiver clock policy that bounds transport latency during a Session.
 _Avoid_: Buffer tweak, restart interval
 
+**Stream Epoch**:
+One bounded lifetime of the remote encoder, SSH transport, and Receiver playback inside an active Session.
+_Avoid_: Session restart, connection retry
+
 **Quick Start**:
 An explicit user action that starts a verified playback-only Mix Profile without reopening the full panel.
 _Avoid_: Autostart

@@ -548,7 +548,7 @@ class ReceiverProtocolTest(unittest.TestCase):
             with self.assertRaises(self.receiver.ProtocolError):
                 self.receiver.parse_operation(command)
 
-    def test_playback_uses_external_clock_to_bound_receiver_drift(self) -> None:
+    def test_playback_uses_external_clock_for_continuous_correction(self) -> None:
         with patch.object(self.receiver.shutil, "which", return_value="/usr/bin/ffplay"), patch.object(
             self.receiver.os, "execv", side_effect=RuntimeError("exec captured")
         ) as execute:
