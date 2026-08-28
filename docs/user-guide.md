@@ -35,6 +35,8 @@ omarchy-shell shell summon jabaiwho.ssh-mixer '{}'
 
 Opening the panel, discovering sources, loading a Mix Profile, waking, unlocking, logging in, or reconnecting never starts audio. Start is always explicit.
 
+Owners may create and operate modified source under the MIT license. The official safety policy is not an anti-modification boundary; downstream builds and owner-authorized agents follow the owner's chosen policy and use distinct release trust. See [Custom builds and forks](custom-builds.md).
+
 On first run:
 
 1. Review this guide, the unsandboxed-plugin warning, and the panel's privacy lifecycle controls.

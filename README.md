@@ -178,9 +178,14 @@ The stream keeps 20 ms Opus frames and flushes each frame as an Ogg page instead
 - Run `pactl list short sinks` and `pactl list short modules` to check for leftover `ssh_mixer_mix` resources.
 - Start application playback before refreshing if the stream is not listed yet.
 
+## Custom builds and forks
+
+SSH-mixer's MIT license permits owner-authorized source changes, including backend and Receiver behavior. Official safety controls are upstream defaults and contribution requirements, not technical restrictions on a downstream owner's build. Modified distributions need their own trust and release identity rather than claiming official signatures. See [Custom builds and forks](docs/custom-builds.md).
+
 ## Security, contributing, testing, and releases
 
 - [Security model and complete permission inventory](docs/security-model.md)
+- [Custom builds, forks, and downstream trust](docs/custom-builds.md)
 - [Private vulnerability reporting policy](SECURITY.md)
 - [Contribution and DCO requirements](CONTRIBUTING.md)
 - [Linux, Windows, and future macOS real-device smoke procedures](docs/testing/smoke-tests.md)

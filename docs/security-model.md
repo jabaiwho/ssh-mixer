@@ -8,6 +8,10 @@ SSH-mixer is an Omarchy shell plugin that routes explicitly selected local audio
 
 Review the checked-out source and exact commit before enabling it. A compromised plugin checkout, Python interpreter, Omarchy shell, user account, or source operating system can bypass every application-level control described below. SSH-mixer's restrictions reduce its own intended authority; they do not turn an unsandboxed plugin into a sandboxed application.
 
+## Official and custom builds
+
+The official build's fixed operations and verification rules define upstream behavior, not a technical restriction on MIT-licensed downstream source. A downstream owner or owner-authorized agent may change the backend, interface, Receiver, protocol, permissions, or release process and accept different risks. Official signatures and attestations apply only to exact upstream bytes; a modified distribution needs a distinct trust and release identity. See [Custom builds and forks](custom-builds.md).
+
 ## Source-side access
 
 ### Commands executed
@@ -154,4 +158,4 @@ SSH-mixer cannot protect against:
 - perfect rollback of every native package/service change; incomplete rollback is reported instead;
 - secure erasure guarantees from SSD/filesystem deletion; verified deletion means the application paths are absent;
 - untested hardware compatibility, particularly Experimental macOS; or
-- production updates before the separate trust-root, release, attestation, and transaction review is complete.
+- a custom build inheriting official release trust or provenance for bytes that upstream did not sign and attest.
