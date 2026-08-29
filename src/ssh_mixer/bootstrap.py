@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
 import shlex
 import subprocess
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -68,9 +71,58 @@ class LinuxBootstrap:
         self._update_receiver_path = ""
         self._update_authorized_keys = ""
         self._update_previous_version = ""
+        self._control_dir: Path | None = None
+        self._control_path = ""
 
     def _host(self) -> str:
         return f"[{self.host}]" if ":" in self.host else self.host
+
+    def _bootstrap_control_path(self) -> str:
+        if self._control_path:
+            return self._control_path
+        runtime = os.environ.get("XDG_RUNTIME_DIR", "")
+        parent = runtime if runtime and Path(runtime).is_dir() and not Path(runtime).is_symlink() else None
+        self._control_dir = Path(tempfile.mkdtemp(prefix="ssh-mixer-control-", dir=parent))
+        self._control_dir.chmod(0o700)
+        self._control_path = str(self._control_dir / "control")
+        return self._control_path
+
+    def _bootstrap_control_options(self) -> list[str]:
+        return [
+            "-o",
+            "ControlMaster=auto",
+            "-o",
+            "ControlPersist=120",
+            "-o",
+            f"ControlPath={self._bootstrap_control_path()}",
+        ]
+
+    def _close_bootstrap_control(self) -> None:
+        if not self._control_path:
+            return
+        self.runner(
+            [
+                "ssh",
+                "-F",
+                "/dev/null",
+                "-p",
+                str(self.connection["port"]),
+                "-o",
+                f"ControlPath={self._control_path}",
+                "-O",
+                "exit",
+                "--",
+                f"{self.connection['user']}@{self._host()}",
+            ],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if self._control_dir is not None:
+            shutil.rmtree(self._control_dir, ignore_errors=True)
+        self._control_dir = None
+        self._control_path = ""
 
     def _transport_options(
         self,
@@ -84,6 +136,7 @@ class LinuxBootstrap:
             if self.bootstrap_key_path and include_bootstrap_identity
             else []
         )
+        control_options = self._bootstrap_control_options() if include_bootstrap_identity else []
         return [
             "-F",
             "/dev/null",
@@ -110,6 +163,7 @@ class LinuxBootstrap:
             "ForwardX11=no",
             "-o",
             "PermitLocalCommand=no",
+            *control_options,
             *identity_options,
         ]
 
@@ -419,46 +473,52 @@ class LinuxBootstrap:
         return {**payload, "verified": True}
 
     def commit(self) -> bool:
-        if not self._update_remote_dir:
+        try:
+            if not self._update_remote_dir:
+                return False
+            remote_dir = self._update_remote_dir
+            completed = self.runner(
+                [
+                    *self._ssh(),
+                    f"rm -rf -- {shlex.quote(remote_dir)} && test ! -e {shlex.quote(remote_dir)}",
+                ],
+                check=False,
+            )
+            if completed.returncode == 0:
+                self._update_remote_dir = ""
+                self._update_receiver_path = ""
+                self._update_authorized_keys = ""
+                return True
             return False
-        remote_dir = self._update_remote_dir
-        completed = self.runner(
-            [
-                *self._ssh(),
-                f"rm -rf -- {shlex.quote(remote_dir)} && test ! -e {shlex.quote(remote_dir)}",
-            ],
-            check=False,
-        )
-        if completed.returncode == 0:
-            self._update_remote_dir = ""
-            self._update_receiver_path = ""
-            self._update_authorized_keys = ""
-            return True
-        return False
+        finally:
+            self._close_bootstrap_control()
 
     def rollback(self, _plan: dict[str, Any], _identity: dict[str, Any]) -> dict[str, Any]:
-        if self._update_remote_dir:
-            remote_dir = self._update_remote_dir
-            receiver = self._update_receiver_path
-            authorized_keys = self._update_authorized_keys
-            command = (
-                "set -eu; "
-                f"install -m 755 -- {shlex.quote(remote_dir)}/receiver.backup {shlex.quote(receiver)}; "
-                f"install -m 600 -- {shlex.quote(remote_dir)}/authorized_keys.backup {shlex.quote(authorized_keys)}; "
-                f"rm -rf -- {shlex.quote(remote_dir)}; test ! -e {shlex.quote(remote_dir)}"
-            )
-            completed = self.runner([*self._ssh(), command], check=False)
-            previous = self._update_previous_version
-            self._update_remote_dir = ""
-            self._update_receiver_path = ""
-            self._update_authorized_keys = ""
-            return {
-                "ok": completed.returncode == 0,
-                "complete": completed.returncode == 0,
-                "restoredVersion": previous if completed.returncode == 0 else "",
-            }
-        if not self._apply_changed_receiver or self._apply_rolled_back:
-            return {"ok": True, "complete": True}
-        # A failure found only by post-install verification cannot safely
-        # reconstruct a prior package state after the apply transaction exits.
-        return {"ok": False, "complete": False, "reason": "post-verification rollback required"}
+        try:
+            if self._update_remote_dir:
+                remote_dir = self._update_remote_dir
+                receiver = self._update_receiver_path
+                authorized_keys = self._update_authorized_keys
+                command = (
+                    "set -eu; "
+                    f"install -m 755 -- {shlex.quote(remote_dir)}/receiver.backup {shlex.quote(receiver)}; "
+                    f"install -m 600 -- {shlex.quote(remote_dir)}/authorized_keys.backup {shlex.quote(authorized_keys)}; "
+                    f"rm -rf -- {shlex.quote(remote_dir)}; test ! -e {shlex.quote(remote_dir)}"
+                )
+                completed = self.runner([*self._ssh(), command], check=False)
+                previous = self._update_previous_version
+                self._update_remote_dir = ""
+                self._update_receiver_path = ""
+                self._update_authorized_keys = ""
+                return {
+                    "ok": completed.returncode == 0,
+                    "complete": completed.returncode == 0,
+                    "restoredVersion": previous if completed.returncode == 0 else "",
+                }
+            if not self._apply_changed_receiver or self._apply_rolled_back:
+                return {"ok": True, "complete": True}
+            # A failure found only by post-install verification cannot safely
+            # reconstruct a prior package state after the apply transaction exits.
+            return {"ok": False, "complete": False, "reason": "post-verification rollback required"}
+        finally:
+            self._close_bootstrap_control()

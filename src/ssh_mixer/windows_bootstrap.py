@@ -59,6 +59,41 @@ def _encoded_powershell(script: str) -> str:
 def _probe_script() -> str:
     return r"""
 $ErrorActionPreference='Stop'
+function Test-FFplayUsable {
+    $command = Get-Command 'ffplay.exe' -CommandType Application -ErrorAction SilentlyContinue
+    if ($null -eq $command) { return $false }
+    $process = $null
+    try {
+        $startInfo = [Diagnostics.ProcessStartInfo]::new()
+        $startInfo.FileName = [string]$command.Source
+        $startInfo.Arguments = '-version'
+        $startInfo.UseShellExecute = $false
+        $startInfo.CreateNoWindow = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $process = [Diagnostics.Process]::new()
+        $process.StartInfo = $startInfo
+        if (-not $process.Start()) { return $false }
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $stderr = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit(5000)) {
+            $process.Kill()
+            return $false
+        }
+        [void]$stdout.Result
+        [void]$stderr.Result
+        return $process.ExitCode -eq 0
+    }
+    catch {
+        return $false
+    }
+    finally {
+        if ($null -ne $process) { $process.Dispose() }
+    }
+}
+function Get-WingetCommand {
+    Get-Command 'winget.exe' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+}
 $sshd=Get-Command 'sshd.exe' -CommandType Application -ErrorAction SilentlyContinue
 if($null -eq $sshd){$sshdPath=Join-Path $env:WINDIR 'System32\OpenSSH\sshd.exe'}else{$sshdPath=$sshd.Source}
 $version=if(Test-Path -LiteralPath $sshdPath){(Get-Item -LiteralPath $sshdPath).VersionInfo.FileVersion}else{''}
@@ -79,8 +114,8 @@ $firewallPort=if($null -ne $firewall){($firewall|Get-NetFirewallPortFilter).Loca
  serviceInspectable=$serviceInspectable
  firewallRule=($null -ne $firewall);firewallPort=[string]$firewallPort
  firewallInspectable=$firewallInspectable;inboundSshVerified=$true
- ffplay=($null -ne (Get-Command 'ffplay.exe' -CommandType Application -ErrorAction SilentlyContinue))
- winget=($null -ne (Get-Command 'winget.exe' -CommandType Application -ErrorAction SilentlyContinue))
+ ffplay=(Test-FFplayUsable)
+ winget=($null -ne (Get-WingetCommand))
  administratorCapable=($groups -match 'S-1-5-32-544')
  elevated=$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }|ConvertTo-Json -Compress
@@ -352,7 +387,10 @@ class WindowsBootstrap(LinuxBootstrap):
         }
 
     def commit(self) -> bool:
-        return self._run_transaction_mode("Commit")
+        try:
+            return self._run_transaction_mode("Commit")
+        finally:
+            self._close_bootstrap_control()
 
     def _cleanup_staging(self, remote_dir: str) -> bool:
         if not remote_dir:
@@ -395,14 +433,17 @@ class WindowsBootstrap(LinuxBootstrap):
         return success
 
     def rollback(self, plan: dict[str, Any], identity: dict[str, Any]) -> dict[str, Any]:
-        if self._transaction_path:
-            complete = self._run_transaction_mode("Rollback")
-            self._transaction_path = ""
-            self._transaction_requires_tty = False
-            cleaned = self._cleanup_staging(self._staging_remote_dir)
-            self._staging_remote_dir = ""
-            complete = complete and cleaned
-            return {"ok": complete, "complete": complete}
-        if self._staging_cleanup_failed:
-            return {"ok": False, "complete": False, "reason": "staging cleanup failed"}
-        return super().rollback(plan, identity)
+        try:
+            if self._transaction_path:
+                complete = self._run_transaction_mode("Rollback")
+                self._transaction_path = ""
+                self._transaction_requires_tty = False
+                cleaned = self._cleanup_staging(self._staging_remote_dir)
+                self._staging_remote_dir = ""
+                complete = complete and cleaned
+                return {"ok": complete, "complete": complete}
+            if self._staging_cleanup_failed:
+                return {"ok": False, "complete": False, "reason": "staging cleanup failed"}
+            return super().rollback(plan, identity)
+        finally:
+            self._close_bootstrap_control()
