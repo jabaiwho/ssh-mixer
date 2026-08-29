@@ -201,8 +201,10 @@ class WindowsSetupTest(unittest.TestCase):
     def test_receiver_copies_binary_stdin_to_a_direct_headless_ffplay_process(self) -> None:
         receiver = RECEIVER_PATH.read_text(encoding="utf-8")
         self.assertIn("function Invoke-FFplay", receiver)
+        self.assertIn("return (Get-FFplayCommand).Source", receiver)
         self.assertIn("$startInfo.UseShellExecute = $false", receiver)
         self.assertIn("$startInfo.CreateNoWindow = $true", receiver)
+        self.assertIn("$startInfo.WorkingDirectory = [IO.Path]::GetDirectoryName($startInfo.FileName)", receiver)
         self.assertIn("$startInfo.RedirectStandardInput = $true", receiver)
         self.assertIn("[Console]::OpenStandardInput().CopyTo($process.StandardInput.BaseStream)", receiver)
         self.assertIn("Invoke-FFplay -Arguments @(", receiver)
@@ -213,8 +215,11 @@ class WindowsSetupTest(unittest.TestCase):
         receiver = RECEIVER_PATH.read_text(encoding="utf-8")
         for artifact in (setup, receiver):
             self.assertIn("function Test-FFplayUsable", artifact)
+            self.assertIn("function Get-FFplayCommand", artifact)
+            self.assertIn("Select-Object -First 1", artifact)
             self.assertIn("[Diagnostics.ProcessStartInfo]::new()", artifact)
             self.assertIn("$startInfo.UseShellExecute = $false", artifact)
+            self.assertIn("$startInfo.WorkingDirectory = [IO.Path]::GetDirectoryName([string]$command.Source)", artifact)
             self.assertIn("$process.WaitForExit(5000)", artifact)
         self.assertIn("ffplay = (Test-FFplayUsable)", setup)
         self.assertIn("if (-not (Test-FFplayUsable))", setup)
@@ -250,8 +255,11 @@ class WindowsSetupTest(unittest.TestCase):
 
         probe = captured[0]
         self.assertIn("function Test-FFplayUsable", probe)
+        self.assertIn("function Get-FFplayCommand", probe)
+        self.assertIn("Select-Object -First 1", probe)
         self.assertIn("[Diagnostics.ProcessStartInfo]::new()", probe)
         self.assertIn("$startInfo.UseShellExecute = $false", probe)
+        self.assertIn("$startInfo.WorkingDirectory = [IO.Path]::GetDirectoryName([string]$command.Source)", probe)
         self.assertIn("$process.WaitForExit(5000)", probe)
         self.assertIn("ffplay=(Test-FFplayUsable)", probe)
 
@@ -491,6 +499,10 @@ class WindowsSetupTest(unittest.TestCase):
         self.assertIn("$QuietStepDb = 4", receiver)
         self.assertIn("afade=t=in", receiver)
         self.assertIn("afade=t=out", receiver)
+        self.assertIn("st=$($fadeOutStart):d=", receiver)
+        self.assertNotIn("$fadeOutStart:d=", receiver)
+        self.assertIn("-Encoding UTF8", receiver)
+        self.assertNotIn("utf8NoBOM", receiver)
         self.assertIn("Assert-NonElevated", receiver)
         self.assertNotIn("Set-AudioDevice", receiver)
         self.assertNotIn("Invoke-Expression", receiver)

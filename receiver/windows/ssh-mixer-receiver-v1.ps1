@@ -35,8 +35,12 @@ function Assert-NonElevated {
     }
 }
 
+function Get-FFplayCommand {
+    Get-Command 'ffplay.exe' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+}
+
 function Test-FFplayUsable {
-    $command = Get-Command 'ffplay.exe' -CommandType Application -ErrorAction SilentlyContinue
+    $command = Get-FFplayCommand
     if ($null -eq $command) { return $false }
     $process = $null
     try {
@@ -44,6 +48,7 @@ function Test-FFplayUsable {
         $startInfo.FileName = [string]$command.Source
         $startInfo.Arguments = '-version'
         $startInfo.UseShellExecute = $false
+        $startInfo.WorkingDirectory = [IO.Path]::GetDirectoryName([string]$command.Source)
         $startInfo.CreateNoWindow = $true
         $startInfo.RedirectStandardOutput = $true
         $startInfo.RedirectStandardError = $true
@@ -72,7 +77,7 @@ function Resolve-FFplay {
     if (-not (Test-FFplayUsable)) {
         throw 'ffplay.exe is unavailable or not executable'
     }
-    return (Get-Command 'ffplay.exe' -CommandType Application).Source
+    return (Get-FFplayCommand).Source
 }
 
 function Invoke-FFplay {
@@ -89,6 +94,7 @@ function Invoke-FFplay {
         $startInfo.FileName = Resolve-FFplay
         $startInfo.Arguments = [string]::Join(' ', $Arguments)
         $startInfo.UseShellExecute = $false
+        $startInfo.WorkingDirectory = [IO.Path]::GetDirectoryName($startInfo.FileName)
         $startInfo.CreateNoWindow = $true
         $startInfo.RedirectStandardInput = $true
         $process = [Diagnostics.Process]::new()
@@ -166,7 +172,7 @@ function Save-QuietLevel {
     $temporary = "$path.tmp-$PID"
     @{ schemaVersion = 1; dbfs = $Dbfs } |
         ConvertTo-Json -Compress |
-        Set-Content -LiteralPath $temporary -Encoding utf8NoBOM
+        Set-Content -LiteralPath $temporary -Encoding UTF8
     Move-Item -LiteralPath $temporary -Destination $path -Force
 }
 
@@ -188,7 +194,7 @@ function Invoke-QuietTest {
     $amplitude = [Math]::Pow(10.0, $Dbfs / 20.0).ToString('0.00000000', [Globalization.CultureInfo]::InvariantCulture)
     $source = "aevalsrc=$amplitude*sin(2*PI*440*t):s=48000:d=$QuietDurationSeconds"
     $fadeOutStart = $QuietDurationSeconds - $QuietFadeSeconds
-    $filter = "afade=t=in:st=0:d=$QuietFadeSeconds,afade=t=out:st=$fadeOutStart:d=$QuietFadeSeconds"
+    $filter = "afade=t=in:st=0:d=$QuietFadeSeconds,afade=t=out:st=$($fadeOutStart):d=$QuietFadeSeconds"
     $exitCode = Invoke-FFplay -Arguments @('-hide_banner', '-loglevel', 'error', '-nodisp', '-autoexit', '-f', 'lavfi', '-i', $source, '-af', $filter, '-t', "$QuietDurationSeconds")
     if ($exitCode -ne 0) {
         throw 'quiet test playback failed'
