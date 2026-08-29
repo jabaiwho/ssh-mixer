@@ -59,8 +59,11 @@ def _encoded_powershell(script: str) -> str:
 def _probe_script() -> str:
     return r"""
 $ErrorActionPreference='Stop'
+function Get-FFplayCommand {
+    Get-Command 'ffplay.exe' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+}
 function Test-FFplayUsable {
-    $command = Get-Command 'ffplay.exe' -CommandType Application -ErrorAction SilentlyContinue
+    $command = Get-FFplayCommand
     if ($null -eq $command) { return $false }
     $process = $null
     try {
@@ -68,6 +71,7 @@ function Test-FFplayUsable {
         $startInfo.FileName = [string]$command.Source
         $startInfo.Arguments = '-version'
         $startInfo.UseShellExecute = $false
+        $startInfo.WorkingDirectory = [IO.Path]::GetDirectoryName([string]$command.Source)
         $startInfo.CreateNoWindow = $true
         $startInfo.RedirectStandardOutput = $true
         $startInfo.RedirectStandardError = $true
