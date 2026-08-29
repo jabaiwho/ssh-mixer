@@ -11,6 +11,7 @@ param(
     [ValidateRange(1, 65535)]
     [int]$SshPort = 22,
     [bool]$InboundSshVerified = $false,
+    [bool]$InstallFfmpegApproved = $false,
     [string]$TransactionPath = '',
     [string]$KeyBody = ''
 )
@@ -102,6 +103,10 @@ function Test-FFplayUsable {
     }
 }
 
+function Get-WingetCommand {
+    Get-Command 'winget.exe' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+}
+
 function Get-Probe {
     $openSshVersion = Get-OpenSshVersion
     $service = $null
@@ -122,7 +127,7 @@ function Get-Probe {
         firewallRule = ($null -ne $firewall)
         firewallPort = [string]$firewallPort
         ffplay = (Test-FFplayUsable)
-        winget = ($null -ne (Get-Command 'winget.exe' -CommandType Application -ErrorAction SilentlyContinue))
+        winget = ($null -ne (Get-WingetCommand))
         administratorCapable = Test-AdministratorCapable
         elevated = Test-Elevated
     }
@@ -226,8 +231,14 @@ function Invoke-Rollback {
     catch { $complete = $false }
     try {
         if ($FfmpegInstalled) {
-            & winget uninstall --id 'Gyan.FFmpeg' --exact --source winget --disable-interactivity
-            if ($LASTEXITCODE -ne 0) { $complete = $false }
+            $winget = Get-WingetCommand
+            if ($null -eq $winget) {
+                $complete = $false
+            }
+            else {
+                & $winget.Source uninstall --id 'Gyan.FFmpeg' --exact --source winget --disable-interactivity
+                if ($LASTEXITCODE -ne 0) { $complete = $false }
+            }
         }
         if (-not $FfmpegRollbackComplete) { $complete = $false }
     }
@@ -423,17 +434,23 @@ try {
         New-NetFirewallRule -Name $FirewallRuleName -DisplayName 'OpenSSH Server (sshd)' -Enabled True -Direction Inbound -Protocol TCP -Action Allow -LocalPort $SshPort | Out-Null
         $FirewallCreated = $true
     }
+    if (-not $probe.ffplay -and -not $InstallFfmpegApproved) {
+        throw 'approved Windows setup plan requires an executable ffplay.exe before package installation'
+    }
     if (-not $probe.ffplay) {
-        & winget list --id 'Gyan.FFmpeg' --exact --source winget --disable-interactivity | Out-Null
+        $winget = Get-WingetCommand
+        if ($null -eq $winget) { throw 'approved FFmpeg package installation requires winget.exe' }
+        & $winget.Source list --id 'Gyan.FFmpeg' --exact --source winget --disable-interactivity | Out-Null
         $packageAlreadyPresent = ($LASTEXITCODE -eq 0)
         if ($packageAlreadyPresent) { $FfmpegRollbackComplete = $false }
         $FfmpegInstalled = -not $packageAlreadyPresent
-        & winget install --id 'Gyan.FFmpeg' --exact --source winget --scope user --accept-source-agreements --accept-package-agreements --disable-interactivity
+        & $winget.Source install --id 'Gyan.FFmpeg' --exact --source winget --scope user --accept-source-agreements --accept-package-agreements --disable-interactivity
         if ($LASTEXITCODE -ne 0) { throw 'winget FFmpeg installation failed' }
         Update-ProcessPath
     }
     if (-not (Test-FFplayUsable)) {
-        throw 'ffplay.exe was not executable after package installation'
+        if ($InstallFfmpegApproved) { throw 'ffplay.exe was not executable after package installation' }
+        throw 'approved Windows setup plan requires an executable ffplay.exe before changes are applied'
     }
 
     Copy-Item -LiteralPath $ReceiverSource -Destination $ReceiverPath -Force

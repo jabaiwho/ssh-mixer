@@ -188,6 +188,11 @@ class WindowsBootstrap(LinuxBootstrap):
                 and plan.get("firewallEvidence") == "verified-inbound-connection"
                 else "$false"
             )
+            install_ffmpeg = (
+                "$true"
+                if "Gyan.FFmpeg" in {str(package) for package in plan.get("packages", [])}
+                else "$false"
+            )
             apply_script = (
                 f"& '{escaped}\\setup-v1.ps1' -Mode Apply "
                 f"-ReceiverSource '{escaped}\\receiver-v1.ps1' "
@@ -196,7 +201,8 @@ class WindowsBootstrap(LinuxBootstrap):
                 f"-SetupSha256 '{artifact_sha256(setup_path)}' "
                 f"-AdministratorConfirmed {administrator} "
                 f"-SshPort {int(plan.get('sshPort', 22))} "
-                f"-InboundSshVerified {inbound_verified}"
+                f"-InboundSshVerified {inbound_verified} "
+                f"-InstallFfmpegApproved {install_ffmpeg}"
             )
             self._apply_changed_receiver = True
             applied = self.runner(

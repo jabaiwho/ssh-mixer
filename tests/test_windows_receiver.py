@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import subprocess
@@ -29,6 +30,11 @@ RECEIVER_PATH = ROOT / "receiver" / "windows" / "ssh-mixer-receiver-v1.ps1"
 
 
 class WindowsSetupTest(unittest.TestCase):
+    @staticmethod
+    def _decode_powershell_command(command: list[str]) -> str:
+        encoded = command[-1].split("-EncodedCommand ", 1)[1]
+        return base64.b64decode(encoded).decode("utf-16-le")
+
     def test_staging_and_transaction_paths_have_distinct_validated_prefixes(self) -> None:
         staging = "C:\\Users\\listener\\AppData\\Local\\Temp\\ssh-mixer-setup-0123456789abcdef0123456789abcdef"
         transaction = "C:\\Users\\listener\\AppData\\Local\\Temp\\ssh-mixer-windows-setup-0123456789abcdef0123456789abcdef"
@@ -206,6 +212,94 @@ class WindowsSetupTest(unittest.TestCase):
         self.assertIn("if (-not (Test-FFplayUsable))", setup)
         self.assertIn("ffplay = (Test-FFplayUsable)", receiver)
         self.assertIn("if (-not (Test-FFplayUsable))", receiver)
+
+    def test_setup_package_install_is_plan_bound_and_uses_resolved_winget(self) -> None:
+        setup = SETUP_PATH.read_text(encoding="utf-8")
+        self.assertIn("[bool]$InstallFfmpegApproved = $false", setup)
+        self.assertIn(
+            "if (-not $probe.ffplay -and -not $InstallFfmpegApproved)",
+            setup,
+        )
+        self.assertIn("function Get-WingetCommand", setup)
+        self.assertIn(
+            "Get-Command 'winget.exe' -CommandType Application -ErrorAction SilentlyContinue",
+            setup,
+        )
+        self.assertIn("& $winget.Source list --id 'Gyan.FFmpeg'", setup)
+        self.assertIn("& $winget.Source install --id 'Gyan.FFmpeg'", setup)
+        self.assertNotIn("& winget list", setup)
+        self.assertNotIn("& winget install", setup)
+
+    def test_bootstrap_binds_ffmpeg_install_to_approved_plan(self) -> None:
+        connection = {
+            "type": "direct",
+            "host": "windows.example",
+            "user": "listener",
+            "port": 22,
+        }
+        staging = (
+            "C:\\Users\\listener\\AppData\\Local\\Temp\\"
+            "ssh-mixer-setup-0123456789abcdef0123456789abcdef"
+        )
+
+        def capture_apply_script(plan: dict[str, object]) -> str:
+            ssh_calls = 0
+            scripts: list[str] = []
+
+            def runner(command: list[str], **_kwargs: object):
+                nonlocal ssh_calls
+                if command[0] == "scp":
+                    return subprocess.CompletedProcess(command, 0, "", "")
+                ssh_calls += 1
+                script = self._decode_powershell_command(command)
+                if ssh_calls == 1:
+                    return subprocess.CompletedProcess(command, 0, staging, "")
+                scripts.append(script)
+                output = "\n".join(
+                    [
+                        '{"schemaVersion":1,"ok":false,"code":"no-changes-applied"}',
+                        '{"schemaVersion":1,"ok":false,"code":"setup-failed","message":"planned stop"}',
+                    ]
+                )
+                return subprocess.CompletedProcess(command, 1, output, "")
+
+            with tempfile.TemporaryDirectory() as temp:
+                public_key = Path(temp) / "id_ed25519.pub"
+                public_key.write_text(
+                    "ssh-ed25519 AAAATEST ssh-mixer\n",
+                    encoding="utf-8",
+                )
+                bootstrap = WindowsBootstrap(
+                    connection,
+                    known_hosts=Path(temp) / "known_hosts",
+                    runner=runner,
+                )
+                with self.assertRaisesRegex(ValueError, "planned stop"):
+                    bootstrap.apply(plan, {"publicKeyPath": str(public_key)})
+            return next(script for script in scripts if "-Mode Apply" in script)
+
+        probe = {
+            "platform": "windows",
+            "user": "listener",
+            "profile": "C:\\Users\\listener",
+            "openSshVersion": "9.5.0.0",
+            "sshdInstalled": True,
+            "sshdRunning": True,
+            "firewallRule": True,
+            "administratorCapable": False,
+            "elevated": False,
+        }
+        no_package_plan = build_windows_plan(
+            {**probe, "ffplay": True, "winget": False},
+            administrator_confirmed=False,
+        )
+        package_plan = build_windows_plan(
+            {**probe, "ffplay": False, "winget": True},
+            administrator_confirmed=False,
+        )
+
+        self.assertIn("-InstallFfmpegApproved $false", capture_apply_script(no_package_plan))
+        self.assertIn("-InstallFfmpegApproved $true", capture_apply_script(package_plan))
 
     def test_receiver_quiet_test_is_fixed_bounded_faded_and_non_elevated(self) -> None:
         receiver = RECEIVER_PATH.read_text(encoding="utf-8")
