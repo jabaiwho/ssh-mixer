@@ -35,6 +35,14 @@ class WindowsSetupTest(unittest.TestCase):
         encoded = command[-1].split("-EncodedCommand ", 1)[1]
         return base64.b64decode(encoded).decode("utf-16-le")
 
+    @staticmethod
+    def _option_values(command: list[str], option: str) -> list[str]:
+        values: list[str] = []
+        for index, item in enumerate(command[:-1]):
+            if item == "-o" and command[index + 1].startswith(f"{option}="):
+                values.append(command[index + 1].split("=", 1)[1])
+        return values
+
     def test_staging_and_transaction_paths_have_distinct_validated_prefixes(self) -> None:
         staging = "C:\\Users\\listener\\AppData\\Local\\Temp\\ssh-mixer-setup-0123456789abcdef0123456789abcdef"
         transaction = "C:\\Users\\listener\\AppData\\Local\\Temp\\ssh-mixer-windows-setup-0123456789abcdef0123456789abcdef"
@@ -213,6 +221,40 @@ class WindowsSetupTest(unittest.TestCase):
         self.assertIn("ffplay = (Test-FFplayUsable)", receiver)
         self.assertIn("if (-not (Test-FFplayUsable))", receiver)
 
+    def test_bootstrap_probe_rejects_unusable_ffplay_application_aliases(self) -> None:
+        connection = {
+            "type": "direct",
+            "host": "windows.example",
+            "user": "listener",
+            "port": 22,
+        }
+        captured: list[str] = []
+
+        def runner(command: list[str], **_kwargs: object):
+            captured.append(self._decode_powershell_command(command))
+            return subprocess.CompletedProcess(
+                command,
+                1,
+                "",
+                "",
+            )
+
+        with tempfile.TemporaryDirectory() as temp:
+            bootstrap = WindowsBootstrap(
+                connection,
+                known_hosts=Path(temp) / "known_hosts",
+                runner=runner,
+            )
+            with self.assertRaisesRegex(ValueError, "capability probe failed"):
+                bootstrap.probe()
+
+        probe = captured[0]
+        self.assertIn("function Test-FFplayUsable", probe)
+        self.assertIn("[Diagnostics.ProcessStartInfo]::new()", probe)
+        self.assertIn("$startInfo.UseShellExecute = $false", probe)
+        self.assertIn("$process.WaitForExit(5000)", probe)
+        self.assertIn("ffplay=(Test-FFplayUsable)", probe)
+
     def test_setup_package_install_is_plan_bound_and_uses_resolved_winget(self) -> None:
         setup = SETUP_PATH.read_text(encoding="utf-8")
         self.assertIn("[bool]$InstallFfmpegApproved = $false", setup)
@@ -300,6 +342,147 @@ class WindowsSetupTest(unittest.TestCase):
 
         self.assertIn("-InstallFfmpegApproved $false", capture_apply_script(no_package_plan))
         self.assertIn("-InstallFfmpegApproved $true", capture_apply_script(package_plan))
+
+    def test_bootstrap_setup_steps_reuse_temporary_native_control_socket(self) -> None:
+        connection = {
+            "type": "direct",
+            "host": "windows.example",
+            "user": "listener",
+            "port": 22,
+        }
+        staging = (
+            "C:\\Users\\listener\\AppData\\Local\\Temp\\"
+            "ssh-mixer-setup-0123456789abcdef0123456789abcdef"
+        )
+        commands: list[list[str]] = []
+        ssh_calls = 0
+
+        def runner(command: list[str], **_kwargs: object):
+            nonlocal ssh_calls
+            commands.append(command)
+            if command[0] == "scp":
+                return subprocess.CompletedProcess(command, 0, "", "")
+            ssh_calls += 1
+            if ssh_calls == 1:
+                return subprocess.CompletedProcess(command, 0, staging, "")
+            output = "\n".join(
+                [
+                    '{"schemaVersion":1,"ok":false,"code":"no-changes-applied"}',
+                    '{"schemaVersion":1,"ok":false,"code":"setup-failed","message":"planned stop"}',
+                ]
+            )
+            return subprocess.CompletedProcess(command, 1, output, "")
+
+        plan = build_windows_plan(
+            {
+                "platform": "windows",
+                "user": "listener",
+                "profile": "C:\\Users\\listener",
+                "openSshVersion": "9.5.0.0",
+                "sshdInstalled": True,
+                "sshdRunning": True,
+                "firewallRule": True,
+                "ffplay": True,
+                "winget": False,
+                "administratorCapable": False,
+                "elevated": False,
+            },
+            administrator_confirmed=False,
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            public_key = Path(temp) / "id_ed25519.pub"
+            public_key.write_text("ssh-ed25519 AAAATEST ssh-mixer\n", encoding="utf-8")
+            bootstrap = WindowsBootstrap(
+                connection,
+                known_hosts=Path(temp) / "known_hosts",
+                runner=runner,
+            )
+            with self.assertRaisesRegex(ValueError, "planned stop"):
+                bootstrap.apply(plan, {"publicKeyPath": str(public_key)})
+
+        setup_commands = [command for command in commands if command[0] in {"ssh", "scp"}]
+        control_paths = {
+            self._option_values(command, "ControlPath")[0]
+            for command in setup_commands
+        }
+        self.assertEqual(len(control_paths), 1)
+        for command in setup_commands:
+            self.assertIn("auto", self._option_values(command, "ControlMaster"))
+            self.assertIn("120", self._option_values(command, "ControlPersist"))
+
+    def test_managed_identity_verification_does_not_reuse_bootstrap_control_socket(self) -> None:
+        key_body = "AAAATEST"
+        connection = {
+            "type": "direct",
+            "host": "windows.example",
+            "user": "listener",
+            "port": 22,
+        }
+        commands: list[list[str]] = []
+
+        def runner(command: list[str], **_kwargs: object):
+            commands.append(command)
+            if len(commands) == 1:
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    authorized_key_entry(f"ssh-ed25519 {key_body} ssh-mixer") + "\n",
+                    "",
+                )
+            if len(commands) == 2:
+                return subprocess.CompletedProcess(
+                    command,
+                    0,
+                    json.dumps(
+                        {
+                            "protocol": "v1",
+                            "protocolVersion": 1,
+                            "helperVersion": "1.1.1",
+                            "platform": "windows",
+                            "runtimeElevated": False,
+                        }
+                    ),
+                    "",
+                )
+            return subprocess.CompletedProcess(command, 1, "", "protocol-rejected")
+
+        plan = build_windows_plan(
+            {
+                "platform": "windows",
+                "user": "listener",
+                "profile": "C:\\Users\\listener",
+                "openSshVersion": "9.5.0.0",
+                "sshdInstalled": True,
+                "sshdRunning": True,
+                "firewallRule": True,
+                "ffplay": True,
+                "winget": False,
+                "administratorCapable": False,
+                "elevated": False,
+            },
+            administrator_confirmed=False,
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            key_path = Path(temp) / "id_ed25519"
+            key_path.write_text("private", encoding="utf-8")
+            bootstrap = WindowsBootstrap(
+                connection,
+                known_hosts=Path(temp) / "known_hosts",
+                runner=runner,
+            )
+            result = bootstrap.verify(
+                plan,
+                {
+                    "privateKeyPath": str(key_path),
+                    "publicKey": f"ssh-ed25519 {key_body} ssh-mixer",
+                },
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertTrue(self._option_values(commands[0], "ControlPath"))
+        for command in commands[1:]:
+            self.assertFalse(self._option_values(command, "ControlPath"))
+            self.assertIn("yes", self._option_values(command, "BatchMode"))
 
     def test_receiver_quiet_test_is_fixed_bounded_faded_and_non_elevated(self) -> None:
         receiver = RECEIVER_PATH.read_text(encoding="utf-8")
