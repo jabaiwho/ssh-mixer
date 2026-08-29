@@ -12,7 +12,7 @@
   "windows/receiver": [
     "Use FFplay external-clock synchronization for continuous correction within each bounded Stream Epoch.",
     "Reject FFplay application aliases that exist but cannot execute under the Receiver account.",
-    "Launch FFplay directly and copy raw Ogg bytes to its standard input without PowerShell native-command mediation."
+    "Resolve one validated FFplay executable and invoke it directly so it inherits raw Ogg bytes from SSH without an intermediary pipe."
   ],
   "macos/companion": [
     "Experimental: report Companion 1.1.1 for the bounded-latency Receiver release."

@@ -198,17 +198,16 @@ class WindowsSetupTest(unittest.TestCase):
         self.assertIn("'-flags', 'low_delay', '-sync', 'ext'", receiver)
         self.assertIn("'-f', 'ogg', '-'", receiver)
 
-    def test_receiver_copies_binary_stdin_to_a_direct_headless_ffplay_process(self) -> None:
+    def test_receiver_invokes_one_validated_ffplay_path_with_inherited_stdin(self) -> None:
         receiver = RECEIVER_PATH.read_text(encoding="utf-8")
         self.assertIn("function Invoke-FFplay", receiver)
         self.assertIn("return (Get-FFplayCommand).Source", receiver)
-        self.assertIn("$startInfo.UseShellExecute = $false", receiver)
-        self.assertIn("$startInfo.CreateNoWindow = $true", receiver)
-        self.assertIn("$startInfo.WorkingDirectory = [IO.Path]::GetDirectoryName($startInfo.FileName)", receiver)
-        self.assertIn("$startInfo.RedirectStandardInput = $true", receiver)
-        self.assertIn("[Console]::OpenStandardInput().CopyTo($process.StandardInput.BaseStream)", receiver)
+        self.assertIn("$ffplay = Resolve-FFplay", receiver)
+        self.assertIn("& $ffplay @Arguments", receiver)
         self.assertIn("Invoke-FFplay -Arguments @(", receiver)
-        self.assertNotIn("& $ffplay", receiver)
+        self.assertNotIn("CopyStandardInput", receiver)
+        self.assertNotIn("$startInfo.RedirectStandardInput", receiver)
+        self.assertNotIn("[Console]::OpenStandardInput()", receiver)
 
     def test_setup_and_receiver_reject_unusable_ffplay_application_aliases(self) -> None:
         setup = SETUP_PATH.read_text(encoding="utf-8")
