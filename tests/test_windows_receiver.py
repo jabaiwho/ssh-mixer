@@ -201,13 +201,22 @@ class WindowsSetupTest(unittest.TestCase):
     def test_receiver_invokes_one_validated_ffplay_path_with_inherited_stdin(self) -> None:
         receiver = RECEIVER_PATH.read_text(encoding="utf-8")
         self.assertIn("function Invoke-FFplay", receiver)
-        self.assertIn("return (Get-FFplayCommand).Source", receiver)
+        self.assertIn("return $command.Source", receiver)
         self.assertIn("$ffplay = Resolve-FFplay", receiver)
         self.assertIn("& $ffplay @Arguments", receiver)
         self.assertIn("Invoke-FFplay -Arguments @(", receiver)
         self.assertNotIn("CopyStandardInput", receiver)
         self.assertNotIn("$startInfo.RedirectStandardInput", receiver)
         self.assertNotIn("[Console]::OpenStandardInput()", receiver)
+
+    def test_receiver_does_not_repeat_ffplay_probe_after_stream_input_can_arrive(self) -> None:
+        receiver = RECEIVER_PATH.read_text(encoding="utf-8")
+        resolve = receiver.split("function Resolve-FFplay {", 1)[1].split(
+            "function Invoke-FFplay {", 1
+        )[0]
+        self.assertIn("$command = Get-FFplayCommand", resolve)
+        self.assertIn("if ($null -eq $command)", resolve)
+        self.assertNotIn("Test-FFplayUsable", resolve)
 
     def test_setup_and_receiver_reject_unusable_ffplay_application_aliases(self) -> None:
         setup = SETUP_PATH.read_text(encoding="utf-8")
@@ -223,7 +232,6 @@ class WindowsSetupTest(unittest.TestCase):
         self.assertIn("ffplay = (Test-FFplayUsable)", setup)
         self.assertIn("if (-not (Test-FFplayUsable))", setup)
         self.assertIn("ffplay = (Test-FFplayUsable)", receiver)
-        self.assertIn("if (-not (Test-FFplayUsable))", receiver)
 
     def test_bootstrap_probe_rejects_unusable_ffplay_application_aliases(self) -> None:
         connection = {

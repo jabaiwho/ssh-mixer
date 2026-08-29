@@ -74,10 +74,11 @@ function Test-FFplayUsable {
 }
 
 function Resolve-FFplay {
-    if (-not (Test-FFplayUsable)) {
-        throw 'ffplay.exe is unavailable or not executable'
+    $command = Get-FFplayCommand
+    if ($null -eq $command) {
+        throw 'ffplay.exe is unavailable'
     }
-    return (Get-FFplayCommand).Source
+    return $command.Source
 }
 
 function Invoke-FFplay {
