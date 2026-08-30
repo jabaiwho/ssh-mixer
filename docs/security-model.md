@@ -114,7 +114,7 @@ On all platforms, a Managed Identity forced command permits only Receiver Protoc
 
 Screen lock defaults to stopping every Session. The optional continue-on-lock policy applies only to non-Capture playback. Capture always stops, repeated lock observation enforces the stop, and unlock/wake/login/reconnection never resumes or starts audio.
 
-Suspend, shutdown, logout, Receiver disconnect, fatal pipeline failure, loss of lock observation, or loss of the required lifecycle/indicator heartbeat stop active routing and invoke ownership-safe cleanup. Start fails closed if privacy services are unavailable. Receiver names are hidden by default, full Connection addresses are never used as normal bar labels, and the active indicator itself cannot be hidden.
+Suspend, shutdown, logout, Receiver disconnect, fatal pipeline failure, loss of lock observation, or loss of the required lifecycle/indicator heartbeat stop active routing and invoke ownership-safe cleanup. Start fails closed if privacy services are unavailable. The non-hideable active bar indicator uses only fixed **mx-streaming** or **mx-capture** text, never Receiver nicknames or Connection addresses, and clicking it opens the controls.
 
 The Receiver test lasts 0.5 seconds, fades, and never changes system volume. Its silent slider defaults to `-32 dBFS` and permits whole-dB choices from `-40` through full-scale `0 dBFS`; only a separate explicit Play action transmits the tone, and the UI warns that high levels may be loud.
 

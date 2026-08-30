@@ -329,9 +329,7 @@ class LifecyclePolicyTest(unittest.TestCase):
                 self.assertFalse(result["automaticStart"])
                 self.assertEqual(stopped, [])
 
-    def test_active_indicator_distinguishes_capture_and_hides_label_by_default(
-        self,
-    ) -> None:
+    def test_active_indicator_uses_fixed_non_identifying_labels(self) -> None:
         hidden = indicator_status(
             ACTIVE_CAPTURE,
             {
@@ -354,29 +352,27 @@ class LifecyclePolicyTest(unittest.TestCase):
         self.assertTrue(hidden["active"])
         self.assertTrue(hidden["capture"])
         self.assertEqual(hidden["kind"], "recording")
+        self.assertEqual(hidden["displayLabel"], "mx-capture")
         self.assertEqual(hidden["receiverLabel"], "")
         self.assertEqual(shown["kind"], "playback")
-        self.assertEqual(shown["receiverLabel"], "Gaming PC")
-        self.assertNotIn("ts.net", shown["receiverLabel"])
+        self.assertEqual(shown["displayLabel"], "mx-streaming")
+        self.assertEqual(shown["receiverLabel"], "")
+        self.assertNotIn("Gaming PC", str(shown))
+        self.assertNotIn("ts.net", str(shown))
 
-    def test_indicator_uses_short_fallback_when_no_receiver_name_exists(self) -> None:
-        dns = indicator_status(
-            ACTIVE_PLAYBACK,
-            {
-                "privacy": {"showReceiverLabel": True},
-                "remote": {"host": "gaming-pc.tailnet-name.ts.net"},
-            },
-        )
-        address = indicator_status(
-            ACTIVE_PLAYBACK,
-            {
-                "privacy": {"showReceiverLabel": True},
-                "remote": {"host": "100.72.18.44"},
-            },
-        )
-
-        self.assertEqual(dns["receiverLabel"], "gaming-pc")
-        self.assertEqual(address["receiverLabel"], "Receiver 18.44")
+    def test_indicator_never_uses_host_as_its_label(self) -> None:
+        for host in ("gaming-pc.tailnet-name.ts.net", "100.72.18.44"):
+            with self.subTest(host=host):
+                result = indicator_status(
+                    ACTIVE_PLAYBACK,
+                    {
+                        "privacy": {"showReceiverLabel": True},
+                        "remote": {"host": host},
+                    },
+                )
+                self.assertEqual(result["displayLabel"], "mx-streaming")
+                self.assertEqual(result["receiverLabel"], "")
+                self.assertNotIn(host, str(result))
 
     def test_inactive_indicator_never_reveals_receiver_label(self) -> None:
         result = indicator_status(
@@ -388,6 +384,7 @@ class LifecyclePolicyTest(unittest.TestCase):
         )
 
         self.assertFalse(result["active"])
+        self.assertEqual(result["displayLabel"], "")
         self.assertEqual(result["receiverLabel"], "")
 
 

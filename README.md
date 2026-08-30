@@ -61,7 +61,7 @@ A Mix Profile retains its Connection, Route Mode, Source Matchers, lock/privacy 
 
 ## Privacy lifecycle and persistent indication
 
-While any Session is active, SSH-mixer's non-hideable active-state widget remains in the Omarchy bar and opens Session controls. Playback uses an audio-stream symbol; a Session with a selected Capture Source uses a distinct urgent microphone/recording symbol. Receiver names are absent by default and appear only after enabling **Show Receiver label** in Settings. The bar never uses a full Connection address such as a Tailscale DNS name. There is no setting that hides an active indicator.
+While any Session is active, SSH-mixer's non-hideable active-state widget remains in the Omarchy bar and opens Session controls when clicked. Playback reads **mx-streaming** beside an audio-stream symbol; a Session with a selected Capture Source reads **mx-capture** beside a distinct urgent microphone/recording symbol. The bar never uses a Receiver nickname or full Connection address, and there is no setting that hides an active indicator.
 
 Screen lock defaults to **Stop all on lock**. The explicit **Continue playback on lock** alternative applies only to Sessions without Capture Sources. Every Capture Session stops and cleans up on lock, and unlock never resumes it. The keep-loaded lifecycle service also stops Sessions before suspend/shutdown and as a login session closes. Receiver disconnect or fatal network loss ends the foreground pipeline and runs the same ownership-safe cleanup. Wake, unlock, login, network reconnection, source discovery, panel open, and profile load never start a Session.
 

@@ -50,7 +50,7 @@ On first run:
 
 ## Choose a Connection
 
-The Mixer view selects which saved Connection receives the next Session. Receiver names such as **Gaming PC** are editable local presentation metadata; renaming one does not change its host trust, address, or Managed Identity. Normal mixer and bar presentation uses the Receiver name, while the full address remains in Receiver details. Stop an active Session before switching Receivers.
+The Receiver section selects which saved Connection receives the next Session. Receiver names such as **Gaming PC** are editable local presentation metadata; renaming one does not change its host trust, address, or Managed Identity. The menu uses the nickname, while the persistent bar uses only fixed **mx-streaming** or **mx-capture** status text and never a Receiver identity. Stop an active Session before switching Receivers.
 
 ### Tailscale Connection — recommended
 
@@ -110,7 +110,7 @@ The Receiver test is optional and never changes system volume. Its slider defaul
 
 ## Session privacy and lock behavior
 
-Every active Session requires fresh protected heartbeats from both the keep-loaded lifecycle service and active-state bar widget. Playback shows an audio-stream icon. Capture shows a distinct urgent microphone/recording icon. Receiver labels are hidden by default; the active indicator cannot be hidden.
+Every active Session requires fresh protected heartbeats from both the keep-loaded lifecycle service and active-state bar widget. Playback always shows an audio-stream icon with **mx-streaming**. Capture shows a distinct urgent microphone/recording icon with **mx-capture**. Clicking either opens the controls. Receiver nicknames and addresses never appear in the bar, and the active indicator cannot be hidden.
 
 **Stop all on lock** is the default. **Continue playback on lock** can preserve only a non-Capture playback Session. Every Capture Session stops on lock and never resumes on unlock. Suspend, shutdown, logout, Receiver disconnect, fatal transport failure, lost lock observation, or lost privacy-service heartbeat also stops and cleans up.
 

@@ -314,7 +314,7 @@ def check_privacy_lifecycle(errors: list[str]) -> None:
     lifecycle = (ROOT / "src" / "ssh_mixer" / "lifecycle.py").read_text(
         encoding="utf-8"
     )
-    for required in ("captureActive", "receiverLabel", "indicator-status"):
+    for required in ("captureActive", "mx-streaming", "mx-capture", "indicator-status"):
         if required not in indicator:
             errors.append(f"Indicator.qml: missing persistent privacy control: {required}")
     for required in (

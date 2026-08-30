@@ -4,7 +4,9 @@ import unittest
 from pathlib import Path
 
 
-PANEL = (Path(__file__).resolve().parents[1] / "Panel.qml").read_text(encoding="utf-8")
+ROOT = Path(__file__).resolve().parents[1]
+PANEL = (ROOT / "Panel.qml").read_text(encoding="utf-8")
+INDICATOR = (ROOT / "Indicator.qml").read_text(encoding="utf-8")
 
 
 class PanelRuntimeSafetyTest(unittest.TestCase):
@@ -44,6 +46,14 @@ class PanelRuntimeSafetyTest(unittest.TestCase):
     def test_every_stable_click_target_has_an_idle_border(self) -> None:
         stable = PANEL.split("component StableButton: Button", 1)[1]
         self.assertIn("bordered: true", stable)
+
+    def test_active_bar_indicator_is_fixed_visible_and_opens_controls(self) -> None:
+        self.assertIn("mx-streaming", INDICATOR)
+        self.assertIn("mx-capture", INDICATOR)
+        self.assertNotIn("receiverLabel", INDICATOR)
+        self.assertIn("interactive: sessionActive", INDICATOR)
+        self.assertIn("onPressed: function()", INDICATOR)
+        self.assertIn('"summon"', INDICATOR)
 
 
 if __name__ == "__main__":
