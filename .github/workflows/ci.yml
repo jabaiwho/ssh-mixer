@@ -25,7 +25,10 @@ jobs:
       - name: Install trusted Ubuntu QML and FFmpeg tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends ffmpeg qt6-declarative-dev-tools
+          sudo apt-get install --yes --no-install-recommends \
+            ffmpeg \
+            qml6-module-qtqml-workerscript \
+            qt6-declarative-dev-tools
 
       - name: Parse QML entry points
         run: |
