@@ -6,7 +6,7 @@ Only the maintainer may approve, sign, publish, replace, yank, or announce an SS
 
 Plugin `v0.1.0` and Receiver `v1.1.0` were published from source commit `917f812bf2c5b4a63de6b5c59f43b904600858d9`. The Receiver release is signed, attested, immutable, and available at <https://github.com/jabaiwho/ssh-mixer/releases/tag/receiver-v1.1.0>. The production signer remains pinned in `release/allowed_signers`; hosted CI, Linux and Windows real-device transaction evidence, strict provenance verification, rollback, and post-publication byte checks are recorded in the completed [initial public-release readiness record](release-readiness.md). macOS remains Experimental with `realDeviceVerified: false`.
 
-The gates below remain mandatory for every later release. A source checkout is not a signed Receiver artifact, automation cannot approve publication, and an existing immutable tag or asset is never replaced.
+The gates below remain mandatory for every later release. Current `main` contains unreleased plugin 0.1.1 and Companion/Receiver 1.1.2 source; their open gates are tracked in the [0.1.1/1.1.2 follow-up readiness record](release-readiness-v0.1.1-receiver-v1.1.2.md). A source checkout is not a signed Receiver artifact, automation cannot approve publication, and an existing immutable tag or asset is never replaced.
 
 ## Release units and compatibility
 
@@ -48,7 +48,7 @@ Before building:
 
 1. Confirm the release issue and exact scope have maintainer approval.
 2. Confirm the release commit is on reviewed protected history with required CI passing.
-3. Run `python3 scripts/check_public_history.py --initial-release` and confirm the one clean-root commit has valid DCO sign-off.
+3. Run `python3 scripts/check_public_history.py` and confirm every reachable public commit passes the DCO, credential, path, and privacy audit. Use `--initial-release` only for the historical one-commit initial public export, never for a follow-up release.
 4. Run all local validation from [CONTRIBUTING.md](../CONTRIBUTING.md) in the clean public-history candidate.
 5. Review hosted Linux, Windows, and macOS jobs. Hosted macOS remains automated evidence, not real-device verification.
 6. Complete applicable real-device procedures in [docs/testing/smoke-tests.md](testing/smoke-tests.md). Linux and Windows behavior or artifacts require their available real-device flow. Record unavailable coverage explicitly.
@@ -68,7 +68,19 @@ ssh-mixer-release namespaces="ssh-mixer-release" ssh-ed25519 PUBLIC_KEY_BODY
 
 On the maintainer's Omarchy workstation, launch **SSH-mixer Release Signing Setup** from the application launcher. The durable source wizard is `scripts/setup_release_signing.sh`; it delegates passphrase entry directly to `ssh-keygen`, remembers only the non-secret key path in owner-only local state, requires review of the fingerprint, and writes only the public trust root. It never configures Git globally, signs release assets, creates tags, pushes, or publishes.
 
-The reviewed file is `release/allowed_signers`. Its approved public fingerprint is `SHA256:EKQn+VLM6BR1gMybF35yITfzfYWNmB8N0FB2rDuqZV0`. `release/allowed_signers.example` is documentation only and is never runtime trust. Rotating or removing a signer is a security-sensitive release requiring explicit rationale and review. Do not accept a metadata signature from an uncommitted, downloaded, or release-provided replacement trust root.
+The reviewed file is `release/allowed_signers`. Its approved public fingerprint is `SHA256:EKQn+VLM6BR1gMybF35yITfzfYWNmB8N0FB2rDuqZV0`. `release/allowed_signers.example` is documentation only and is never runtime trust. Rotating or removing a signer is a security-sensitive release requiring explicit rationale and review. Do not accept a metadata signature from an uncommitted, downloaded, or release-provided replacement trust root. If the approved removable signing storage is unavailable, signing is blocked; never generate an improvised replacement key.
+
+## Sign the reviewed plugin source tag
+
+A plugin source release uses a signed `vX.Y.Z` Git tag at the exact reviewed release commit. Confirm `manifest.json` and `PLUGIN_VERSION` match the intended tag, review all plugin-facing documentation and release changes, then create and verify the tag locally with the approved Git tag signing identity:
+
+```bash
+git tag -s vX.Y.Z -m "SSH-mixer X.Y.Z" COMMIT
+git verify-tag vX.Y.Z
+python3 scripts/check_public_history.py --tag vX.Y.Z
+```
+
+Creating and verifying a local tag does not authorize pushing it. Tag push, documentation cutover, and announcement remain separate maintainer approvals. Never move or replace an existing plugin tag.
 
 ## Build immutable artifacts and metadata
 
@@ -118,7 +130,7 @@ Create and locally verify a cryptographically signed annotated tag matching the 
 ```bash
 git tag -s receiver-vX.Y.Z -m "SSH-mixer Receiver X.Y.Z" COMMIT
 git verify-tag receiver-vX.Y.Z
-python3 scripts/check_public_history.py --initial-release --tag receiver-vX.Y.Z
+python3 scripts/check_public_history.py --tag receiver-vX.Y.Z
 ```
 
 Tag signing and the offline OpenSSH metadata-signing identity are separate controls; neither substitutes for the other. Do not push the tag merely because it was created. Create the GitHub release/tag once only after final approval. Never overwrite an artifact, metadata file, signature, tag, or release asset at an existing URL. A correction gets a new semantic version and new immutable URLs. Enable GitHub's immutable-release protection when available.
@@ -158,7 +170,7 @@ gh attestation verify /secure/artifacts/ARTIFACT \
   --repo jabaiwho/ssh-mixer
 ```
 
-Record the verification result and workflow run in the private release checklist without machine identifiers or credentials. Attestations provide public build provenance; they do not replace the offline OpenSSH metadata signature, SHA-256/size checks, full source commit, or manual approval. `.github/workflows/attest-release.yml` is manual, pinned, and cannot publish a GitHub release; do not run it until its exact clean-root commit and timestamp are approved. **Publication remains blocked** until its subjects and attestations are independently verified.
+Record the verification result and workflow run in the private release checklist without machine identifiers or credentials. Attestations provide public build provenance; they do not replace the offline OpenSSH metadata signature, SHA-256/size checks, full source commit, or manual approval. `.github/workflows/attest-release.yml` is manual, pinned, and cannot publish a GitHub release; do not run it until its exact reviewed public-history commit and timestamp are approved. **Publication remains blocked** until its subjects and attestations are independently verified.
 
 ## Installation, verification, and rollback review
 

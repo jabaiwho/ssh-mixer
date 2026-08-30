@@ -1,6 +1,6 @@
 # Initial public-release readiness — completed record
 
-This document began as the maintainer checkpoint for issue #18. Its pre-publication review narrative is retained as historical evidence; statements describing then-open gates or a private canonical repository are not current status.
+This document began as a checkpoint in the private pre-publication tracker. Its narrative is retained as historical evidence; private tracker numbers are intentionally not mapped to current public issues, and statements describing then-open gates or a private canonical repository are not current status.
 
 The approved outcome is plugin `v0.1.0` and immutable Receiver `v1.1.0` at source commit `917f812bf2c5b4a63de6b5c59f43b904600858d9`. Hosted CI run `33139410848` passed all required Linux/QML, Windows, and Experimental macOS jobs. Attestation run `33139861588` produced provenance for the six artifacts, metadata, and `SHA256SUMS`; all eight subjects were downloaded, matched byte-for-byte, and verified against the exact workflow, source commit, and `refs/heads/main`. The metadata SHA-256 is `2dea724307b32789b4450178e0d523d6f29d5a096b2e6f1fc73d640cd19c3770`. The final public release is <https://github.com/jabaiwho/ssh-mixer/releases/tag/receiver-v1.1.0>.
 
@@ -99,4 +99,4 @@ The new canonical repository was created privately and received only the audited
 - [x] Generate and independently verify GitHub provenance attestations for every published artifact and metadata file.
 - [x] Obtain separate maintainer confirmations for repository cutover, visibility, tag signatures, tag pushes, immutable draft staging, and Receiver release publication. Announcement remains a separate decision.
 
-Every applicable publication box is complete. Issue #18 may close after the post-publication documentation correction is merged and its final evidence is recorded; no announcement is implied by closure.
+Every applicable initial-publication box is complete. The historical private readiness ticket closed after the post-publication documentation correction and final evidence were recorded; no announcement was implied by closure.
