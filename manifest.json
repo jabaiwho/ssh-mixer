@@ -15,7 +15,7 @@
   },
   "barWidget": {
     "displayName": "SSH-mixer Session",
-    "description": "Non-disableable indication while an SSH-mixer Session is active",
+    "description": "Clickable mx-streaming or mx-capture status while a Session is active",
     "category": "Audio",
     "allowMultiple": false,
     "defaultSection": "right"

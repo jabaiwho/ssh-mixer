@@ -72,7 +72,7 @@ The first release includes Windows and Linux support plus an Experimental macOS 
 58. As a user, I want an unavoidable persistent indicator while a Session is active, so that streaming cannot become invisible.
 59. As a user, I want microphone Sessions marked with a distinct recording indicator, so that sensitive capture is immediately recognizable.
 60. As a user, I want the compact indicator to protect receiver-name privacy by default, so that my infrastructure is not permanently exposed on the bar.
-61. As a user, I want an option to show the receiver label beside the indicator, so that I can choose greater at-a-glance detail.
+61. As a user, I want every active bar indicator to use fixed mx-streaming or mx-capture text and open controls when clicked, so that Session state stays visible without exposing Receiver identity.
 62. As a user, I want the indicator to open Session controls, so that stopping is immediately accessible.
 63. As a user, I want screen lock to stop all streaming by default, so that unattended capture and playback transmission end.
 64. As a user, I want a clear setting to continue non-microphone audio while locked, so that deliberate playback use remains possible.
@@ -152,7 +152,7 @@ The first release includes Windows and Linux support plus an Experimental macOS 
 23. Mix Profiles store a Connection, Route Mode, Source Matchers, privacy policy, and quality settings. Playback-only profiles support explicit Quick Start even while an armed Playback Source is inactive; Capture Sources force confirmation.
 24. No Mix Profile or Session starts on panel open, login, wake, network reconnection, or application discovery.
 25. The Session lifecycle is serialized and fail-closed. Screen lock stops all by default; the only alternative continues non-microphone audio. Capture never resumes automatically. Suspend, logout, disconnect, and fatal network loss stop and clean up.
-26. A persistent, non-disableable indicator represents every active Session. Capture is visually distinct. Receiver names are hidden on the bar by default but may be enabled; full Connection addresses are never normal bar labels.
+26. A persistent, non-disableable indicator represents every active Session and opens controls when clicked. Playback uses fixed mx-streaming text; visually distinct Capture uses mx-capture. Receiver names and full Connection addresses are never bar labels.
 27. Resource tracking records ownership evidence, process start identity, and Session identity. Cleanup never signals or unloads a resource whose identity cannot be proven.
 28. Protected application directories use least-permission modes; atomic writes reject unsafe links and preserve permissions. Detached workers receive protected input rather than serialized configuration in process arguments.
 29. Logs are structured, bounded, redacted, and contain no audio. Default retention is seven days or twenty Sessions, whichever removes data first. Verbose mode expires after one Session.

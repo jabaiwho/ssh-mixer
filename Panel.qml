@@ -510,10 +510,10 @@ Item {
     })
   }
 
-  function savePrivacy(lockBehavior, showReceiverLabel) {
+  function savePrivacy(lockBehavior) {
     var next = {
       lockBehavior: String(lockBehavior || "stop-all"),
-      showReceiverLabel: showReceiverLabel === true
+      showReceiverLabel: false
     }
     run("privacySave", { privacy: next })
   }
@@ -2009,25 +2009,13 @@ Item {
                     Layout.fillWidth: true
                   }
                 }
-                RowLayout {
+                Text {
                   width: parent.width
-                  spacing: Style.space(8)
-                  Text {
-                    text: "Show Receiver label on persistent bar indicator"
-                    color: root.foreground
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.bodySmall
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                  }
-                  ToggleSwitch {
-                    checked: root.privacy.showReceiverLabel === true
-                    foreground: root.foreground
-                    onToggled: root.savePrivacy(
-                      root.privacy.lockBehavior,
-                      root.privacy.showReceiverLabel !== true
-                    )
-                  }
+                  text: "The active bar indicator always reads mx-streaming or mx-capture and never exposes a Receiver nickname or address."
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  wrapMode: Text.WordWrap
                 }
               }
 
@@ -2043,7 +2031,7 @@ Item {
                 spacing: Style.space(8)
                 Text {
                   width: parent.width
-                  text: "The Receiver is the other PC that plays audio. Names shown here and in the bar use your nickname; network addresses remain technical connection details."
+                  text: "The Receiver is the other PC that plays audio. This menu uses your nickname; the bar uses only the fixed mx-streaming or mx-capture status label."
                   color: root.dim
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
@@ -3129,7 +3117,7 @@ Item {
     foreground: root.foreground
     fontFamily: root.fontFamily
     selected: root.privacy.lockBehavior === value
-    onClicked: root.savePrivacy(value, root.privacy.showReceiverLabel === true)
+    onClicked: root.savePrivacy(value)
   }
 
   component StableButton: Button {

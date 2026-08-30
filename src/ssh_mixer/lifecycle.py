@@ -5,8 +5,6 @@ import selectors
 import signal
 import subprocess
 import time
-import ipaddress
-import unicodedata
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -126,48 +124,25 @@ def handle_lifecycle_event(
     }
 
 
-def _short_receiver_host(host: str) -> str:
-    value = host.strip().rstrip(".")
-    if not value:
-        return ""
-    try:
-        address = ipaddress.ip_address(value.strip("[]"))
-    except ValueError:
-        return value.split(".", 1)[0]
-    if isinstance(address, ipaddress.IPv4Address):
-        return "Receiver " + ".".join(str(address).split(".")[-2:])
-    return "Receiver " + ":".join(address.exploded.split(":")[:2]) + "…"
-
-
 def indicator_status(
     status: dict[str, Any] | None = None,
     config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     current = dict(status or normalize_status())
-    configured = config or load_config()
+    del config
     active = current.get("active") is True
     capture = active and _has_capture(current)
-    privacy = configured.get("privacy", {})
-    show_label = (
-        isinstance(privacy, dict) and privacy.get("showReceiverLabel") is True
-    )
-    remote = configured.get("remote", {})
-    connection = configured.get("connection")
-    label = ""
-    if active and show_label:
-        if isinstance(connection, dict):
-            label = str(connection.get("receiverName", "")).strip()
-        if not label and isinstance(remote, dict):
-            label = _short_receiver_host(str(remote.get("host", "")))
-    if any(unicodedata.category(character).startswith("C") for character in label):
-        label = ""
+    display_label = "mx-capture" if capture else ("mx-streaming" if active else "")
     return {
         "ok": True,
         "schemaVersion": 1,
         "active": active,
         "capture": capture,
         "kind": "recording" if capture else "playback",
-        "receiverLabel": label[:253],
+        "displayLabel": display_label,
+        # Retained as an empty compatibility field so older adapters cannot
+        # accidentally expose a Receiver nickname or Connection address.
+        "receiverLabel": "",
         "state": str(current.get("state", "stopped")),
         "opensSessionControls": True,
         "disableAllowedWhileActive": False,

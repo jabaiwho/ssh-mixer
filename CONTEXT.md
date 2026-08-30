@@ -13,7 +13,7 @@ A saved, verified way to reach one receiver, including its connection type, host
 _Avoid_: Provider, remote config
 
 **Receiver Name**:
-An editable local nickname used to identify a receiver in the mixer and persistent bar without exposing its full connection address. It does not participate in connection or trust identity.
+An editable local nickname used to identify a receiver in the mixer without exposing its full connection address. It does not participate in connection or trust identity; the persistent bar uses only fixed Session-status labels.
 _Avoid_: Hostname, source name
 
 **Tailscale Connection**:

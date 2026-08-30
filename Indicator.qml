@@ -9,11 +9,10 @@ WidgetButton {
 
   property bool sessionActive: false
   property bool captureActive: false
-  property string receiverLabel: ""
   property string backend: Quickshell.env("SSH_MIXER_BIN") || (Quickshell.env("HOME") + "/.config/omarchy/plugins/jabaiwho.ssh-mixer/bin/ssh-mixer")
 
   text: sessionActive
-    ? ((captureActive ? "󰍬" : "󰕾") + (receiverLabel ? ("  " + receiverLabel) : ""))
+    ? ((captureActive ? "󰍬  mx-capture" : "󰕾  mx-streaming"))
     : ""
   active: captureActive
   activeColor: bar ? bar.urgent : Color.urgent
@@ -34,7 +33,6 @@ WidgetButton {
     if (!data.ok) return
     sessionActive = data.active === true
     captureActive = data.capture === true
-    receiverLabel = String(data.receiverLabel || "")
   }
 
   onPressed: function() {
