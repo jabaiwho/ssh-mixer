@@ -1161,9 +1161,15 @@ def start_session(config: dict[str, Any]) -> dict[str, Any]:
             concrete_ids = resolve_source_ids(available_sources, source_ids)
             if len(concrete_ids) != len(dict.fromkeys(map(str, source_ids))):
                 raise SessionError("one or more selected sources are no longer available")
+            configured_matchers = config.get("sourceMatchers", [])
+            source_matchers = (
+                configured_matchers
+                if isinstance(configured_matchers, list) and configured_matchers
+                else matchers_for_source_ids(available_sources, concrete_ids)
+            )
             resolution = resolve_session_source_ids(
                 available_sources,
-                matchers_for_source_ids(available_sources, concrete_ids),
+                source_matchers,
                 concrete_ids,
             )
             config["sourceIds"] = resolution["sourceIds"]
