@@ -227,6 +227,47 @@ class SourceMatcherTest(unittest.TestCase):
         self.assertNotIn("sink-input:101", persisted)
         self.assertIn('"pinnedSourceMatchers"', persisted)
 
+    def test_stale_internal_loopback_is_removed_from_recent_source_history(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(Path(temp) / "config"),
+                "XDG_DATA_HOME": str(Path(temp) / "data"),
+                "XDG_STATE_HOME": str(Path(temp) / "state"),
+                "XDG_RUNTIME_DIR": str(Path(temp) / "runtime"),
+            },
+            clear=False,
+        ):
+            store = SourceHistoryStore()
+            store.path.parent.mkdir(parents=True, exist_ok=True)
+            store.path.write_text(
+                json.dumps(
+                    {
+                        "schemaVersion": 1,
+                        "recent": [
+                            {
+                                "schemaVersion": 1,
+                                "kind": "playback",
+                                "name": "output.loopback-1086-13",
+                            }
+                        ],
+                        "ignoredUntilAbsent": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            app = MixerApplication(
+                discover_sources=lambda: [SOURCES[0]], source_history=store
+            )
+            inspected = app.execute({"operation": "inspect"})
+            persisted = store.path.read_text(encoding="utf-8")
+
+        self.assertEqual(
+            [choice["label"] for choice in inspected["sourceChoices"]],
+            ["Example Player"],
+        )
+        self.assertNotIn("output.loopback", persisted)
+
     def test_recent_history_is_private_bounded_and_excludes_capture(self) -> None:
         with tempfile.TemporaryDirectory() as temp, patch.dict(
             os.environ,
