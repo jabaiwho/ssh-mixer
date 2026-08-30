@@ -7,6 +7,7 @@ from typing import Any
 from .audio import (
     friendly_app_label,
     friendly_device_label,
+    is_internal_playback_loopback,
     matcher_for_source,
     normalize_source_matcher,
 )
@@ -71,6 +72,8 @@ def _normalized_unique(matchers: list[dict[str, Any]]) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     for value in matchers:
         matcher = normalize_source_matcher(value)
+        if is_internal_playback_loopback(matcher):
+            continue
         if matcher not in normalized:
             normalized.append(matcher)
     return normalized
@@ -88,6 +91,8 @@ def _choice_groups(
         _choice_id(matcher): [] for matcher in catalog
     }
     for source in sources:
+        if is_internal_playback_loopback(source):
+            continue
         try:
             matcher = matcher_for_source(source)
         except ValueError:

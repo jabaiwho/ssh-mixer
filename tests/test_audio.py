@@ -43,6 +43,12 @@ Sink Input #102
         application.name = "wayvibes.real"
         node.name = "wayvibes.real"
         media.name = "Playback"
+Sink Input #103
+    Sink: 10
+    Properties:
+        node.name = "output.loopback-1086-13"
+        media.name = "loopback-1086-13 output"
+        target.object = "ssh_mixer_mix"
 """
 
 
@@ -75,6 +81,14 @@ class DiscoverSourcesTest(unittest.TestCase):
         self.assertEqual(by_id["source:alsa_output.headset.monitor"]["type"], "monitor")
         self.assertEqual(by_id["source:alsa_output.headset.monitor"]["categoryLabel"], "Output Monitor")
         self.assertTrue(by_id["source:alsa_output.headset.monitor"]["isDefaultMonitor"])
+
+    def test_hides_internal_pipewire_loopback_endpoints_from_playback_sources(self) -> None:
+        sources = discover_sources(fake_runner)
+
+        self.assertNotIn("sink-input:103", {source["id"] for source in sources})
+        self.assertFalse(
+            any("loopback-1086-13" in source["label"].lower() for source in sources)
+        )
 
     def test_resolves_compatibility_aliases_without_selecting_other_apps(self) -> None:
         sources = discover_sources(fake_runner)

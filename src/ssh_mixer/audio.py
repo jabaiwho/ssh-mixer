@@ -127,6 +127,14 @@ def friendly_device_label(raw: str) -> str:
     return label
 
 
+def is_internal_playback_loopback(value: dict[str, Any]) -> bool:
+    """Identify PipeWire's generated module-loopback output endpoint."""
+
+    kind = str(value.get("type") or value.get("kind") or "").strip().lower()
+    name = str(value.get("name", "")).strip().lower()
+    return kind == "playback" and name.startswith("output.loopback-")
+
+
 def is_cliamp_stream(obj: dict[str, Any]) -> bool:
     props = obj.get("properties", {})
     needles = [
@@ -183,10 +191,15 @@ def build_playback_sources(
         sink_id = _field(item, "Sink")
         sink = sinks_by_id.get(sink_id)
         sink_name = _field(sink, "Name") if sink else ""
+        node_name = _prop(item, "node.name")
+        if is_internal_playback_loopback(
+            {"type": "playback", "name": node_name}
+        ):
+            continue
         app_name = (
             _prop(item, "application.name")
             or _prop(item, "media.name")
-            or _prop(item, "node.name")
+            or node_name
             or f"Sink input {pulse_id}"
         )
         label = friendly_app_label(app_name)
@@ -199,7 +212,7 @@ def build_playback_sources(
                 "categoryLabel": "Playback Source",
                 "sensitiveCapture": False,
                 "pulseId": pulse_id,
-                "name": _prop(item, "node.name"),
+                "name": node_name,
                 "label": label,
                 "detail": f"Application playback → {sink_label}",
                 "sinkId": sink_id,

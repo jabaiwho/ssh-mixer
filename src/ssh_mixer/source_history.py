@@ -4,7 +4,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .audio import matcher_for_source, normalize_source_matcher
+from .audio import (
+    is_internal_playback_loopback,
+    matcher_for_source,
+    normalize_source_matcher,
+)
 from .config import ensure_dirs, secure_write_text, state_dir
 
 HISTORY_SCHEMA_VERSION = 1
@@ -24,7 +28,11 @@ def _normalize_playback_matchers(values: Any) -> list[dict[str, Any]]:
             matcher = normalize_source_matcher(value)
         except ValueError:
             continue
-        if matcher.get("kind") == "playback" and matcher not in matchers:
+        if (
+            matcher.get("kind") == "playback"
+            and not is_internal_playback_loopback(matcher)
+            and matcher not in matchers
+        ):
             matchers.append(matcher)
     return matchers
 
@@ -32,7 +40,7 @@ def _normalize_playback_matchers(values: Any) -> list[dict[str, Any]]:
 def _current_playback_matchers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
     matchers: list[dict[str, Any]] = []
     for source in sources:
-        if source.get("type") != "playback":
+        if source.get("type") != "playback" or is_internal_playback_loopback(source):
             continue
         try:
             matcher = matcher_for_source(source)
@@ -54,25 +62,31 @@ class SourceHistoryStore:
     def __init__(self, path: Path | None = None) -> None:
         self.path = path or source_history_path()
 
-    def _read(self) -> dict[str, list[dict[str, Any]]]:
+    def _read(self) -> tuple[dict[str, list[dict[str, Any]]], bool]:
         ensure_dirs()
+        empty = {"recent": [], "ignoredUntilAbsent": []}
         if self.path.is_symlink():
             raise ValueError("Source history may not be a symlink")
         if not self.path.exists():
-            return {"recent": [], "ignoredUntilAbsent": []}
+            return empty, False
         self.path.chmod(0o600)
         try:
             value = json.loads(self.path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            return {"recent": [], "ignoredUntilAbsent": []}
+            return empty, False
         if not isinstance(value, dict):
-            return {"recent": [], "ignoredUntilAbsent": []}
-        return {
+            return empty, False
+        state = {
             "recent": _normalize_playback_matchers(value.get("recent")),
             "ignoredUntilAbsent": _normalize_playback_matchers(
                 value.get("ignoredUntilAbsent")
             ),
         }
+        needs_rewrite = (
+            value.get("recent") != state["recent"]
+            or value.get("ignoredUntilAbsent") != state["ignoredUntilAbsent"]
+        )
+        return state, needs_rewrite
 
     def _write(self, state: dict[str, list[dict[str, Any]]]) -> None:
         ensure_dirs()
@@ -89,10 +103,13 @@ class SourceHistoryStore:
         )
 
     def load(self) -> list[dict[str, Any]]:
-        return self._read()["recent"]
+        state, needs_rewrite = self._read()
+        if needs_rewrite:
+            self._write(state)
+        return state["recent"]
 
     def observe(self, sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        state = self._read()
+        state, needs_rewrite = self._read()
         current = _current_playback_matchers(sources)
         ignored = [
             matcher
@@ -105,7 +122,7 @@ class SourceHistoryStore:
         ]
         recent = recent[:MAX_RECENT_PLAYBACK_SOURCES]
         updated = {"recent": recent, "ignoredUntilAbsent": ignored}
-        if updated != state:
+        if updated != state or needs_rewrite:
             self._write(updated)
         return recent
 
