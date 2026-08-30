@@ -128,12 +128,16 @@ def check_workflows(files: list[Path], errors: list[str]) -> None:
             "workflow_dispatch:",
             "id-token: write",
             "attestations: write",
-            "check_public_history.py --initial-release",
+            "python3 scripts/check_public_history.py",
             "actions/attest-build-provenance@",
             "actions/upload-artifact@",
         ):
             if marker not in release_text:
                 errors.append(f"attest-release.yml: missing release control: {marker}")
+        if "check_public_history.py --initial-release" in release_text:
+            errors.append(
+                "attest-release.yml: follow-up releases must audit full history without initial-release mode"
+            )
         for forbidden in ("gh release", "softprops/action-gh-release", "contents: write"):
             if forbidden in release_text:
                 errors.append(f"attest-release.yml: automatic publication is forbidden: {forbidden}")
@@ -459,6 +463,13 @@ def check_public_documentation(errors: list[str]) -> None:
             "Security and privacy",
             "Supply chain and repository controls",
             "Blockers requiring evidence or maintainer approval",
+        ),
+        "docs/release-readiness-v0.1.1-receiver-v1.1.2.md": (
+            "Candidate status",
+            "Plugin real-device gates",
+            "Receiver 1.1.2 gates",
+            "Build, signing, and attestation gates",
+            "Current blockers",
         ),
         "docs/testing/smoke-tests.md": (
             "Linux source and Linux Receiver",

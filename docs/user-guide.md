@@ -16,6 +16,8 @@ The source desktop is Omarchy Linux with PipeWire/PulseAudio compatibility. Tail
 
 Plugin `v0.1.0` is reviewed source at one signed Git tag. Receiver `v1.1.0` is a separate [signed, attested, immutable production release](https://github.com/jabaiwho/ssh-mixer/releases/tag/receiver-v1.1.0), and the source pins its production metadata trust root. The plugin remains unsandboxed source rather than a binary package; review [SECURITY.md](../SECURITY.md) and pin the exact tag before enabling it.
 
+Current `main` contains unreleased plugin 0.1.1 and Companion/Receiver 1.1.2 source. Continue using the signed versions below until the [0.1.1/1.1.2 readiness record](release-readiness-v0.1.1-receiver-v1.1.2.md) is complete and the new release is independently verified.
+
 ```bash
 git clone --branch v0.1.0 --depth 1 \
   https://github.com/jabaiwho/ssh-mixer \

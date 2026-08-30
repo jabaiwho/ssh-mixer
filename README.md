@@ -12,6 +12,8 @@ The guided first-run, Connection, host-trust, identity, setup, privacy, diagnost
 
 SSH-mixer `v0.1.0` is distributed as reviewed source at one signed Git tag. Receiver `v1.1.0` is a separate [signed, attested, immutable production release](https://github.com/jabaiwho/ssh-mixer/releases/tag/receiver-v1.1.0), and its metadata trust root is pinned in `release/allowed_signers`. Omarchy plugins remain unsandboxed source, so review and pin the exact tag rather than enabling a moving branch.
 
+Current `main` contains unreleased plugin 0.1.1 and Companion/Receiver 1.1.2 source. Do not treat source version declarations as signed release availability; follow the [live readiness record](docs/release-readiness-v0.1.1-receiver-v1.1.2.md) until the new tags and immutable Receiver release are independently verified.
+
 ```bash
 git clone --branch v0.1.0 --depth 1 \
   https://github.com/jabaiwho/ssh-mixer \
