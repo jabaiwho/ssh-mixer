@@ -89,7 +89,7 @@ A saved receiver, Route Mode, Source Matchers, privacy policy, and stream settin
 _Avoid_: Preset, session config
 
 **Session**:
-One explicitly started period of audio routing and optional receiver streaming, ending on user stop or a configured lifecycle event.
+One explicitly started period of audio routing and optional receiver streaming. Direct Playback Source selection or Quick Start begins it; removing the final Source, End Stream, or a configured lifecycle event ends it.
 _Avoid_: Stream config
 
 **Stream Cadence**:

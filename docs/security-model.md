@@ -59,7 +59,7 @@ Protected application paths reject symbolic links at security-sensitive seams an
 
 ### Audio access and changes
 
-The backend can inspect the user's PipeWire/PulseAudio graph and read audio from explicitly selected Playback Sources, Capture Sources, or Output Monitors. A selected Capture Source can contain microphone audio. Audio is passed through process pipes to FFmpeg/OpenSSH and is not written to configuration or diagnostics.
+The backend can inspect the user's PipeWire/PulseAudio graph and read audio from explicitly selected Playback Sources, Capture Sources, or Output Monitors. Direct Playback Source selection is the explicit action that starts routing. A selected Capture Source can contain microphone audio and therefore requires an additional confirmation before every start or restart that includes it. Audio is passed through process pipes to FFmpeg/OpenSSH and is not written to configuration or diagnostics.
 
 During a Session, SSH-mixer can create a temporary null sink and loopback modules and move streams matching explicitly armed Playback Sources. It immediately preserves the prior normal local default sink, reconciles newly appearing application streams against stable Source Matchers, and leaves unselected applications local. Selecting **Desktop (All)** is the explicit path for all normal output and automatically excludes every other Source; combining the default Output Monitor with an application stream could otherwise duplicate audio and create a Both-mode feedback path. Cleanup verifies ownership before unloading modules, moving streams back, or terminating tracked processes, and does not overwrite a newer output choice made by the user. This does not stop another process running as the same desktop user from accessing audio independently.
 
@@ -67,7 +67,7 @@ During a Session, SSH-mixer can create a temporary null sink and loopback module
 
 - Omarchy keeps `Lifecycle.qml` loaded to observe lock and login-session boundaries.
 - An active-only, non-hideable bar widget indicates every Session; Capture has a distinct urgent indication.
-- A deliberately started Session uses a detached per-user backend worker and persists until Stop or a configured lifecycle/failure event.
+- A deliberately started Session uses a detached per-user backend worker and persists until the final Source is removed, End Stream is chosen, or a configured lifecycle/failure event occurs.
 - SSH-mixer does not install a source-side system service, cron job, login hook, kernel module, or privileged daemon.
 - Receiver setup is persistent because it installs a helper and a forced `authorized_keys` entry. Platform setup can also enable required receiver services or install approved packages as described below.
 
@@ -112,9 +112,9 @@ On all platforms, a Managed Identity forced command permits only Receiver Protoc
 
 ## Privacy lifecycle
 
-Screen lock defaults to stopping every Session. The optional continue-on-lock policy applies only to non-Capture playback. Capture always stops, repeated lock observation enforces the stop, and unlock/wake/login/reconnection never resumes or starts audio.
+Screen lock defaults to stopping every Session. The optional continue-on-lock policy applies only to non-Capture playback. Capture always stops, repeated lock observation enforces the stop, and unlock/wake/login/reconnection never resumes or starts audio. Panel opening, discovery, Refresh, Pin, Recently used, and Mix Profile loading also never start audio; only a direct Playback Source choice, confirmed Capture choice, or explicit playback-only Quick Start may do so.
 
-Suspend, shutdown, logout, Receiver disconnect, fatal pipeline failure, loss of lock observation, or loss of the required lifecycle/indicator heartbeat stop active routing and invoke ownership-safe cleanup. Start fails closed if privacy services are unavailable. The non-hideable active bar indicator uses only fixed **mx-streaming** or **mx-capture** text, never Receiver nicknames or Connection addresses, and clicking it opens the controls.
+Suspend, shutdown, logout, Receiver disconnect, fatal pipeline failure, loss of lock observation, or loss of the required lifecycle/indicator heartbeat stop active routing and invoke ownership-safe cleanup. Input-driven Session start fails closed if privacy services are unavailable. The non-hideable active bar indicator uses only fixed **mx-streaming** or **mx-capture** text, never Receiver nicknames or Connection addresses, and clicking it opens the controls.
 
 The Receiver test lasts 0.5 seconds, fades, and never changes system volume. Its silent slider defaults to `-32 dBFS` and permits whole-dB choices from `-40` through full-scale `0 dBFS`; only a separate explicit Play action transmits the tone, and the UI warns that high levels may be loud.
 

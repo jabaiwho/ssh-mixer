@@ -22,19 +22,36 @@ class PanelRuntimeSafetyTest(unittest.TestCase):
         self.assertIn("var connection = root.connection || ({})", PANEL)
         self.assertIn("enabled: !!root.windowsSetupPlan", PANEL)
 
-    def test_accordion_uses_logical_sources_and_named_receivers(self) -> None:
+    def test_inputs_are_always_visible_above_the_renumbered_accordions(self) -> None:
         self.assertIn('property string activeSection: "sources"', PANEL)
-        self.assertIn('return ["sources", "session", "profiles", "receiver", "connection", "privacy", "diagnostics", "removal"]', PANEL)
-        self.assertIn('label: "1. Sources"', PANEL)
-        self.assertIn('label: "2. Session Controls"', PANEL)
-        self.assertIn('label: "3. Mix Profiles"', PANEL)
-        self.assertIn('label: "8. Removal"', PANEL)
+        self.assertIn('return ["sources", "profiles", "receiver", "connection", "privacy", "diagnostics", "removal"]', PANEL)
+        self.assertIn('label: "1. Inputs"', PANEL)
+        self.assertIn('label: "2. Mix Profiles"', PANEL)
+        self.assertIn('label: "7. Removal"', PANEL)
+        self.assertNotIn('Session Controls', PANEL)
+        self.assertIn('visible: true // Inputs are never collapsed.', PANEL)
         self.assertIn("data.sourceChoices instanceof Array", PANEL)
         self.assertIn("sourceChoiceIds: selectedIds.slice()", PANEL)
         self.assertIn('proc.command = [backend, "source-pin"', PANEL)
         self.assertIn('proc.command = [backend, "connection-select"', PANEL)
         self.assertIn('proc.command = [backend, "connection-rename"', PANEL)
         self.assertIn('placeholderText: "Receiver name"', PANEL)
+
+    def test_source_selection_drives_sessions_but_capture_requires_confirmation(self) -> None:
+        self.assertIn('import "PanelSession.js" as PanelSession', PANEL)
+        self.assertIn("function requestSessionApply(captureConfirmed, startWhenStopped)", PANEL)
+        self.assertIn("PanelSession.nextCommand(", PANEL)
+        self.assertIn("function confirmCaptureSource()", PANEL)
+        self.assertIn("property var pendingCaptureSource: null", PANEL)
+        self.assertIn("captureSession && sources[i].recentChoice === true", PANEL)
+        self.assertIn('label: "End Stream"', PANEL)
+        self.assertIn('text: "Choosing an Input starts streaming. Turning off the final Input ends it."', PANEL)
+        self.assertIn('proc.command = [backend, "configure", "--json", JSON.stringify(payload || {})]', PANEL)
+        self.assertNotIn('label: root.activeSession ? "Stop" : "Start"', PANEL)
+
+    def test_number_keys_jump_to_corresponding_sections(self) -> None:
+        self.assertIn("function activateNumberedSection(number)", PANEL)
+        self.assertIn('if (/^[1-7]$/.test(t)) root.activateNumberedSection(Number(t))', PANEL)
 
     def test_keyboard_navigation_scrolls_sections_and_keeps_horizontal_motion_local(self) -> None:
         self.assertIn("function focusTarget()", PANEL)

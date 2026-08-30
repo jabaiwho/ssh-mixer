@@ -7,6 +7,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "PanelScroll.js" as PanelScroll
+import "PanelSession.js" as PanelSession
 
 Item {
   id: root
@@ -61,6 +62,7 @@ Item {
   property var pendingTrust: null
   property bool configurationDirty: false
   property var pendingSession: null
+  property var pendingCaptureSource: null
   property string message: ""
   property bool busy: false
   property string action: ""
@@ -117,11 +119,11 @@ Item {
   }
 
   function sectionOrder() {
-    return ["sources", "session", "profiles", "receiver", "connection", "privacy", "diagnostics", "removal"]
+    return ["sources", "profiles", "receiver", "connection", "privacy", "diagnostics", "removal"]
   }
 
   function sectionExpanded(section) {
-    return activeSection === section || pinnedSections[section] === true
+    return section === "sources" || activeSection === section || pinnedSections[section] === true
   }
 
   function toggleSection(section) {
@@ -145,6 +147,11 @@ Item {
     scheduleSectionScroll(activeSection)
   }
 
+  function activateNumberedSection(number) {
+    var section = PanelSession.numberedSection(number, sectionOrder())
+    if (section) activateSection(section)
+  }
+
   function visibleSourceChoices() {
     var visible = []
     for (var i = 0; i < sources.length; i++) {
@@ -165,9 +172,24 @@ Item {
     return count
   }
 
+  function sourceFocusOffset() {
+    return pendingCaptureSource ? 2 : 1
+  }
+
+  function sourceActionIndex() {
+    return sourceFocusOffset() + visibleSourceChoices().length
+  }
+
+  function focusCaptureConfirmation() {
+    if (!cursorActive) return
+    focusSection = "sources"
+    focusIndex = 1
+    focusColumn = 0
+    scheduleFocusScroll()
+  }
+
   function sectionHeaderItem(section) {
     if (section === "sources") return sourcesHeader
-    if (section === "session") return sessionHeader
     if (section === "profiles") return profilesHeader
     if (section === "receiver") return receiverHeader
     if (section === "connection") return connectionHeader
@@ -179,7 +201,6 @@ Item {
 
   function sectionBodyItem(section) {
     if (section === "sources") return sourcesContent
-    if (section === "session") return sessionContent
     if (section === "profiles") return profilesContent
     if (section === "receiver") return receiverContent
     if (section === "connection") return connectionSetupBody
@@ -279,6 +300,27 @@ Item {
     run("sourceHistoryClear", {})
   }
 
+  function selectedCaptureSource() {
+    for (var i = 0; i < sources.length; i++) {
+      if (String(sources[i].type || "") === "capture" && sourceSelected(sources[i].id))
+        return sources[i]
+    }
+    return null
+  }
+
+  function selectSource(source, captureConfirmed) {
+    if (!source) return
+    var id = String(source.id || "")
+    var list = selectedIds.slice()
+    if (source.exclusiveSelection === true) list = [id]
+    else if (desktopAllSelected()) return
+    else if (list.indexOf(id) < 0) list.push(id)
+    pendingCaptureSource = null
+    selectedIds = list
+    configurationDirty = true
+    requestSessionApply(captureConfirmed === true, true)
+  }
+
   function toggleSource(id) {
     id = String(id)
     var source = null
@@ -288,15 +330,42 @@ Item {
         break
       }
     }
+    if (!source) return
     var list = selectedIds.slice()
     var pos = list.indexOf(id)
-    if (pos >= 0) list.splice(pos, 1)
-    else if (source && source.exclusiveSelection === true) list = [id]
-    else if (desktopAllSelected()) return
-    else list.push(id)
-    selectedIds = list
-    configurationDirty = true
-    if (activeSession) requestSessionRestart()
+    if (pos >= 0) {
+      list.splice(pos, 1)
+      pendingCaptureSource = null
+      selectedIds = list
+      configurationDirty = true
+      requestSessionApply(false, true)
+      return
+    }
+    if (String(source.type || "") === "capture") {
+      pendingCaptureSource = source
+      message = "Confirm this Capture Input before its microphone audio can stream."
+      focusCaptureConfirmation()
+      return
+    }
+    selectSource(source)
+  }
+
+  function confirmCaptureSource() {
+    var source = pendingCaptureSource
+    pendingCaptureSource = null
+    if (!source) return
+    if (source.restartSelection === true) requestSessionApply(true)
+    else selectSource(source, true)
+  }
+
+  function cancelCaptureSource() {
+    var restore = pendingCaptureSource && pendingCaptureSource.restartSelection === true
+    pendingCaptureSource = null
+    message = "Capture Input was not selected."
+    if (restore) {
+      configurationDirty = false
+      refresh()
+    }
   }
 
   function selectedLabels() {
@@ -317,27 +386,51 @@ Item {
     if (destination !== next) {
       destination = next
       configurationDirty = true
-      if (activeSession) requestSessionRestart()
+      requestSessionApply(false, activeSession)
     }
   }
 
-  function requestSessionRestart() {
-    pendingSession = { destination: destination, sourceChoiceIds: selectedIds.slice() }
-    message = "Applying " + destination.toUpperCase() + "…"
-    if (!busy) run("stop", {})
-  }
-
-  function continueSessionRestart(finishedAction) {
-    if (!pendingSession || busy) return
-    if (finishedAction === "stop") {
-      var next = pendingSession
+  function requestSessionApply(captureConfirmed, startWhenStopped) {
+    var capture = selectedCaptureSource()
+    var willStart = activeSession || startWhenStopped !== false
+    if (PanelSession.requiresCaptureConfirmation(!!capture && willStart, captureConfirmed)) {
       pendingSession = null
-      Qt.callLater(function() { root.run("start", next) })
-    } else {
-      Qt.callLater(function() {
-        if (root.pendingSession && !root.busy) root.run("stop", {})
-      })
+      pendingCaptureSource = {
+        label: String(capture.label || "this Capture Input"),
+        restartSelection: true
+      }
+      message = "Confirm before starting or restarting Capture audio."
+      focusCaptureConfirmation()
+      return
     }
+    pendingCaptureSource = null
+    pendingSession = {
+      destination: destination,
+      sourceChoiceIds: selectedIds.slice(),
+      startWhenStopped: startWhenStopped !== false
+    }
+    message = selectedIds.length > 0
+      ? "Applying Inputs to " + destination.toUpperCase() + "…"
+      : "Ending the stream and cleaning up…"
+    if (!busy) applyPendingSession()
+  }
+
+  function applyPendingSession() {
+    if (!pendingSession || busy) return
+    var desired = pendingSession
+    var command = PanelSession.nextCommand(
+      activeSession,
+      desired.sourceChoiceIds,
+      desired.destination,
+      desired.startWhenStopped
+    )
+    if (command.action !== "stop") pendingSession = null
+    run(command.action, command.payload)
+  }
+
+  function continueSessionApply() {
+    if (!pendingSession || busy) return
+    Qt.callLater(function() { root.applyPendingSession() })
   }
 
   function refresh() {
@@ -621,14 +714,11 @@ Item {
     run("test", { destination: destination })
   }
 
-  function start() {
-    pendingSession = null
-    run("start", { destination: destination, sourceChoiceIds: selectedIds.slice() })
-  }
-
-  function stop() {
-    pendingSession = null
-    run("stop", {})
+  function endStream() {
+    pendingCaptureSource = null
+    selectedIds = []
+    configurationDirty = true
+    requestSessionApply(false, true)
   }
 
   function prepareDiagnostic() {
@@ -704,7 +794,10 @@ Item {
       message = "Testing " + remoteSummary + "…"
     } else if (kind === "start") {
       proc.command = [backend, "start", "--json", JSON.stringify(payload || {})]
-      message = "Starting…"
+      message = "Starting selected Inputs…"
+    } else if (kind === "selectionSave") {
+      proc.command = [backend, "configure", "--json", JSON.stringify(payload || {})]
+      message = "Saving Input and Route Mode choices…"
     } else if (kind === "migrationPlan") {
       proc.command = [backend, "migration-plan", "--json", JSON.stringify(payload || {})]
       message = "Planning the selected legacy migration without changing it…"
@@ -827,8 +920,11 @@ Item {
       if (!configurationDirty) {
         destination = normalizeDestination(data.config.destination)
         var selected = []
+        var captureSession = data.status && data.status.active === true
+          && data.status.captureActive === true
         for (var i = 0; i < sources.length; i++) {
-          if (sources[i].selected === true) selected.push(String(sources[i].id))
+          if (sources[i].selected === true || (captureSession && sources[i].recentChoice === true))
+            selected.push(String(sources[i].id))
           if (sources[i].recentChoice === true) recentCaptureIds.push(String(sources[i].id))
         }
         selectedIds = selected
@@ -876,7 +972,6 @@ Item {
   }
 
   function handleResult(exitCode) {
-    var finishedAction = action
     var finishedQuiet = quietAction
     busy = false
     var raw = procOut || "{}"
@@ -887,18 +982,15 @@ Item {
     if (action === "snapshot") {
       applySnapshot(data)
       if (!finishedQuiet || !data.ok) message = data.ok ? "Ready" : (data.error || procErr || "Refresh failed")
-      continueSessionRestart(finishedAction)
       return
     }
     if (action === "status") {
       applyStatus(data)
-      continueSessionRestart(finishedAction)
       return
     }
     if (action === "test") {
       applyStatus(data)
       message = data.ok ? ("Connection OK: " + remoteSummary) : (data.error || (data.connection && data.connection.error) || procErr || "Connection failed")
-      continueSessionRestart(finishedAction)
       return
     }
     if (action === "start") {
@@ -907,15 +999,23 @@ Item {
         configurationDirty = false
         message = statusText + (selectedLabels() ? ": " + selectedLabels() : "")
       } else {
-        message = data.error || procErr || "Start failed"
+        message = data.error || procErr || "Could not start selected Inputs"
       }
-      continueSessionRestart(finishedAction)
       return
     }
     if (action === "stop") {
       applyStatus(data)
-      message = data.ok ? "Stopped and cleaned up" : (data.error || procErr || "Stop failed")
-      continueSessionRestart(finishedAction)
+      message = data.ok ? "Stream ended and audio routes were cleaned up" : (data.error || procErr || "Stop failed")
+      if (!data.ok) pendingSession = null
+      return
+    }
+    if (action === "selectionSave") {
+      if (data.ok) {
+        configurationDirty = false
+        message = selectedIds.length > 0
+          ? "Route Mode saved. Selected Inputs remain stopped."
+          : "No Inputs selected. Stream ended."
+      } else message = data.error || procErr || "Could not save Input selection"
       return
     }
     if (action === "migrationPlan") {
@@ -1014,7 +1114,7 @@ Item {
           ? "Mix Profile saved. Capture Sources remain recent choices and always require confirmation."
           : (data.profile && data.profile.quickStartEnabled
             ? "Playback-only Mix Profile saved with explicit Quick Start."
-            : "Mix Profile saved. Open it in the mixer to review sources before Start.")
+            : "Mix Profile saved. Open it in the mixer; choosing an Input applies it immediately.")
       } else message = data.error || procErr || "Could not save Mix Profile"
       return
     }
@@ -1035,14 +1135,14 @@ Item {
         message = "Quick Start began after every saved source matched uniquely."
       } else if (data.openMixer) {
         message = data.reason === "capture-confirmation-required"
-          ? "Mixer opened: reselect and confirm every Capture Source before Start."
+          ? "Mixer opened: reselect and confirm every Capture Source before streaming."
           : (data.reason === "session-active"
-            ? "Mixer opened without interrupting the active Session. Stop it before Quick Start."
+            ? "Mixer opened without interrupting the active Session. End Stream before Quick Start."
             : "Mixer opened because a Quick Start source is missing or ambiguous. Nothing started.")
       } else if (data.ok) {
         message = data.profile && data.profile.requiresCaptureConfirmation
-          ? "Mix Profile opened. Reselect each recent Capture Source, review it, then Start explicitly."
-          : "Mix Profile opened. Review sources, then Start explicitly."
+          ? "Mix Profile opened. Reselect and confirm each Capture Source before streaming."
+          : "Mix Profile opened without starting. Toggle or choose a Playback Input to apply it."
       } else message = data.error || procErr || "Could not open Mix Profile"
       return
     }
@@ -1231,16 +1331,17 @@ Item {
   }
 
   function sectionLength(section) {
-    if (section === "sources") return Math.max(1, visibleSourceChoices().length)
-    if (section === "session") return 2
+    if (section === "sources") return sourceActionIndex() + 1
     if (section === "profiles") return Math.max(1, mixProfiles.length)
     if (section === "receiver") return Math.max(1, connections.length)
     return 1
   }
 
   function columnLength(section, row) {
-    if (section === "sources" && visibleSourceChoices().length > 0) return 2
-    if (section === "session") return 3
+    if (section === "sources") {
+      if (row === 0 || row === sourceActionIndex()) return 3
+      return 2
+    }
     return 1
   }
 
@@ -1252,13 +1353,18 @@ Item {
   }
 
   function focusTarget() {
-    if (focusSection === "sources") return sourceRepeater.itemAt(focusIndex) || sourcesHeader
+    if (focusSection === "sources") {
+      if (focusIndex === 0)
+        return [localDestination, receiverDestination, bothDestination][focusColumn]
+      if (pendingCaptureSource && focusIndex === 1)
+        return [confirmCaptureAction, cancelCaptureAction][focusColumn]
+      var sourceIndex = focusIndex - sourceFocusOffset()
+      if (sourceIndex >= 0 && sourceIndex < visibleSourceChoices().length)
+        return sourceRepeater.itemAt(sourceIndex) || sourcesHeader
+      return [endStreamAction, refreshAction, testAction][focusColumn]
+    }
     if (focusSection === "profiles") return profileRepeater.itemAt(focusIndex) || profilesHeader
     if (focusSection === "receiver") return receiverRepeater.itemAt(focusIndex) || receiverHeader
-    if (focusSection === "session") {
-      if (focusIndex === 0) return [startAction, refreshAction, testAction][focusColumn]
-      return [localDestination, receiverDestination, bothDestination][focusColumn]
-    }
     if (focusSection === "connection") return connectionHeader
     if (focusSection === "privacy") return privacyHeader
     if (focusSection === "diagnostics") return diagnosticsHeader
@@ -1338,21 +1444,27 @@ Item {
 
   function activateCursor() {
     cursorActive = true
-    if (focusSection === "sources" && visibleSourceChoices().length > 0) {
-      var source = visibleSourceChoices()[focusIndex]
-      if (focusColumn === 0 && sourceSelectionEnabled(source)) toggleSource(source.id)
-      else if (focusColumn === 1) pinSource(source)
+    if (focusSection === "sources") {
+      var choices = visibleSourceChoices()
+      if (focusIndex === 0) {
+        chooseDestination(["local", "ssh", "both"][focusColumn])
+      } else if (pendingCaptureSource && focusIndex === 1) {
+        focusColumn === 0 ? confirmCaptureSource() : cancelCaptureSource()
+      } else {
+        var sourceIndex = focusIndex - sourceFocusOffset()
+        if (sourceIndex >= 0 && sourceIndex < choices.length) {
+          var source = choices[sourceIndex]
+          if (focusColumn === 0 && sourceSelectionEnabled(source)) toggleSource(source.id)
+          else if (focusColumn === 1) pinSource(source)
+        } else if (focusColumn === 0) endStream()
+        else if (focusColumn === 1) refresh()
+        else testConnection()
+      }
     } else if (focusSection === "profiles" && mixProfiles.length > 0) {
       var profile = mixProfiles[focusIndex]
       profile.quickStartEnabled ? quickStartMixProfile(profile) : openMixProfile(profile)
     } else if (focusSection === "receiver" && connections.length > 0) {
       selectConnection(connections[focusIndex])
-    } else if (focusSection === "session") {
-      if (focusIndex === 0) {
-        if (focusColumn === 0) activeSession ? stop() : start()
-        else if (focusColumn === 1) refresh()
-        else testConnection()
-      } else chooseDestination(["local", "ssh", "both"][focusColumn])
     } else if (focusSection === "removal") {
       confirmRemovalChoice(false)
     }
@@ -1382,7 +1494,10 @@ Item {
     id: proc
     stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.procOut = text }
     stderr: StdioCollector { waitForEnd: true; onStreamFinished: root.procErr = String(text || "").trim() }
-    onExited: function(exitCode) { root.handleResult(exitCode) }
+    onExited: function(exitCode) {
+      root.handleResult(exitCode)
+      root.continueSessionApply()
+    }
   }
 
   PanelWindow {
@@ -1412,8 +1527,8 @@ Item {
       onCloseRequested: root.dismiss()
       onTabRequested: function(direction) { root.tabSection(direction) }
       onTextKey: function(t) {
-        if (t === "r" || t === "R") root.refresh()
-        else if (t === "s" || t === "S") root.activeSession ? root.stop() : root.start()
+        if (/^[1-7]$/.test(t)) root.activateNumberedSection(Number(t))
+        else if (t === "r" || t === "R") root.refresh()
       }
 
       Item {
@@ -1806,32 +1921,120 @@ Item {
                 }
               }
 
-              AccordionHeader {
+              FixedSectionHeader {
                 id: sourcesHeader
-                sectionKey: "sources"
-                label: "1. Sources"
+                label: "1. Inputs"
               }
 
               Column {
                 id: sourcesContent
                 x: Style.space(6)
                 width: parent.width - Style.space(12)
-                visible: root.sectionExpanded("sources")
+                visible: true // Inputs are never collapsed.
                 spacing: Style.space(8)
 
                 Text {
                   width: parent.width
-                  text: "Select what this Session may route. Pin keeps an important app or input visible without selecting it."
+                  text: "Play chosen Inputs on"
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.body
+                  font.bold: true
+                }
+
+                RowLayout {
+                  width: parent.width
+                  spacing: Style.space(8)
+                  DestinationButton {
+                    id: localDestination
+                    label: "This PC"
+                    value: "local"
+                    rowIndex: 0
+                    Layout.fillWidth: true
+                  }
+                  DestinationButton {
+                    id: receiverDestination
+                    label: "Receiver"
+                    value: "ssh"
+                    rowIndex: 1
+                    Layout.fillWidth: true
+                  }
+                  DestinationButton {
+                    id: bothDestination
+                    label: "Both"
+                    value: "both"
+                    rowIndex: 2
+                    Layout.fillWidth: true
+                  }
+                }
+
+                Text {
+                  width: parent.width
+                  text: "Choosing an Input starts streaming. Turning off the final Input ends it."
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  font.bold: true
+                  wrapMode: Text.WordWrap
+                }
+
+                Text {
+                  width: parent.width
+                  text: (!root.activeSession && root.selectedIds.length > 0
+                      ? "Selected Inputs are stopped; turn one off and choose it again to start, or End Stream to clear them. "
+                      : "")
+                    + "Pin keeps an important app or input visible without selecting or starting it. Capture Inputs require confirmation and are never played through this PC's speakers."
                   color: root.dim
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
                   wrapMode: Text.WordWrap
                 }
 
+                Column {
+                  visible: !!root.pendingCaptureSource
+                  width: parent.width
+                  spacing: Style.space(6)
+
+                  Text {
+                    width: parent.width
+                    text: root.pendingCaptureSource
+                      ? ("Capture confirmation required for " + String(root.pendingCaptureSource.label || "this Input") + ". Microphone audio will begin immediately.")
+                      : ""
+                    color: root.urgent
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                    font.bold: true
+                    wrapMode: Text.WordWrap
+                  }
+
+                  RowLayout {
+                    width: parent.width
+                    spacing: Style.space(8)
+                    ActionButton {
+                      id: confirmCaptureAction
+                      label: "Confirm Capture & stream"
+                      rowIndex: -1
+                      hasCursor: root.cursorActive && root.focusSection === "sources"
+                        && root.focusIndex === 1 && root.focusColumn === 0
+                      onPressed: root.confirmCaptureSource()
+                      Layout.fillWidth: true
+                    }
+                    ActionButton {
+                      id: cancelCaptureAction
+                      label: "Cancel"
+                      rowIndex: -1
+                      hasCursor: root.cursorActive && root.focusSection === "sources"
+                        && root.focusIndex === 1 && root.focusColumn === 1
+                      onPressed: root.cancelCaptureSource()
+                      Layout.fillWidth: true
+                    }
+                  }
+                }
+
                 Text {
                   visible: root.visibleSourceChoices().length === 0
                   width: parent.width
-                  text: root.busy ? "Finding audio sources…" : "No active, selected, or pinned Sources. Check Recently used below."
+                  text: root.busy ? "Finding audio Inputs…" : "No active, selected, or pinned Inputs. Check Recently used below."
                   color: root.dim
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.bodySmall
@@ -1875,40 +2078,28 @@ Item {
                     Layout.preferredWidth: Style.space(120)
                   }
                 }
-              }
 
-              PanelSeparator { visible: false; foreground: root.foreground; width: parent.width }
-
-              AccordionHeader {
-                id: sessionHeader
-                sectionKey: "session"
-                label: "2. Session Controls"
-              }
-
-              Column {
-                id: sessionContent
-                x: Style.space(6)
-                width: parent.width - Style.space(12)
-                visible: root.sectionExpanded("session")
-                spacing: Style.space(8)
                 RowLayout {
                   width: parent.width
                   spacing: Style.space(8)
                   ActionButton {
-                    id: startAction
-                    label: root.activeSession ? "Stop" : "Start"
+                    id: endStreamAction
+                    label: "End Stream"
                     rowIndex: -1
-                    hasCursor: root.cursorActive && root.focusSection === "session"
-                      && root.focusIndex === 0 && root.focusColumn === 0
-                    onPressed: root.activeSession ? root.stop() : root.start()
+                    enabled: root.activeSession || root.selectedIds.length > 0 || !!root.pendingSession
+                    hasCursor: root.cursorActive && root.focusSection === "sources"
+                      && root.focusIndex === root.sourceActionIndex()
+                      && root.focusColumn === 0
+                    onPressed: root.endStream()
                     Layout.fillWidth: true
                   }
                   ActionButton {
                     id: refreshAction
                     label: "Refresh"
                     rowIndex: -1
-                    hasCursor: root.cursorActive && root.focusSection === "session"
-                      && root.focusIndex === 0 && root.focusColumn === 1
+                    hasCursor: root.cursorActive && root.focusSection === "sources"
+                      && root.focusIndex === root.sourceActionIndex()
+                      && root.focusColumn === 1
                     onPressed: root.refresh()
                     Layout.fillWidth: true
                   }
@@ -1916,58 +2107,12 @@ Item {
                     id: testAction
                     label: "Test Connection"
                     rowIndex: -1
-                    hasCursor: root.cursorActive && root.focusSection === "session"
-                      && root.focusIndex === 0 && root.focusColumn === 2
+                    hasCursor: root.cursorActive && root.focusSection === "sources"
+                      && root.focusIndex === root.sourceActionIndex()
+                      && root.focusColumn === 2
                     onPressed: root.testConnection()
                     Layout.fillWidth: true
                   }
-                }
-                Text {
-                  width: parent.width
-                  text: "Play selected Sources on"
-                  color: root.foreground
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.body
-                  font.bold: true
-                }
-                RowLayout {
-                  width: parent.width
-                  spacing: Style.space(8)
-                  DestinationButton {
-                    id: localDestination
-                    label: "This PC"
-                    value: "local"
-                    rowIndex: 0
-                    hasCursor: root.cursorActive && root.focusSection === "session"
-                      && root.focusIndex === 1 && root.focusColumn === 0
-                    Layout.fillWidth: true
-                  }
-                  DestinationButton {
-                    id: receiverDestination
-                    label: "Receiver"
-                    value: "ssh"
-                    rowIndex: 1
-                    hasCursor: root.cursorActive && root.focusSection === "session"
-                      && root.focusIndex === 1 && root.focusColumn === 1
-                    Layout.fillWidth: true
-                  }
-                  DestinationButton {
-                    id: bothDestination
-                    label: "Both"
-                    value: "both"
-                    rowIndex: 2
-                    hasCursor: root.cursorActive && root.focusSection === "session"
-                      && root.focusIndex === 1 && root.focusColumn === 2
-                    Layout.fillWidth: true
-                  }
-                }
-                Text {
-                  width: parent.width
-                  text: "Receiver means the named PC that plays the audio. Capture Sources are never played through this PC's speakers."
-                  color: root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  wrapMode: Text.WordWrap
                 }
               }
 
@@ -1976,7 +2121,7 @@ Item {
               AccordionHeader {
                 id: profilesHeader
                 sectionKey: "profiles"
-                label: "3. Mix Profiles"
+                label: "2. Mix Profiles"
               }
 
               Column {
@@ -2038,35 +2183,6 @@ Item {
               PanelSeparator { visible: false; foreground: root.foreground; width: parent.width }
 
               Column {
-                width: parent.width
-                visible: false
-                spacing: Style.space(8)
-                PanelSectionHeader { text: "ROUTE"; foreground: root.foreground; fontFamily: root.fontFamily }
-                RowLayout {
-                  width: parent.width
-                  spacing: Style.space(8)
-                  DestinationButton { label: "Local"; value: "local"; rowIndex: 0; Layout.fillWidth: true }
-                  DestinationButton { label: "SSH"; value: "ssh"; rowIndex: 1; Layout.fillWidth: true }
-                  DestinationButton { label: "Both"; value: "both"; rowIndex: 2; Layout.fillWidth: true }
-                }
-                Text {
-                  width: parent.width
-                  text: "Capture Sources are never played through local speakers."
-                  color: root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
-                  wrapMode: Text.WordWrap
-                }
-                RowLayout {
-                  width: parent.width
-                  spacing: Style.space(8)
-                  ActionButton { label: "Refresh"; rowIndex: 0; onPressed: root.refresh(); Layout.fillWidth: true }
-                  ActionButton { label: "Test"; rowIndex: 1; onPressed: root.testConnection(); Layout.fillWidth: true }
-                  ActionButton { label: root.activeSession ? "Stop" : "Start"; rowIndex: 2; onPressed: root.activeSession ? root.stop() : root.start(); Layout.fillWidth: true }
-                }
-              }
-
-              Column {
                 id: privacyContent
                 parent: privacyBody
                 width: parent.width
@@ -2108,7 +2224,7 @@ Item {
               AccordionHeader {
                 id: receiverHeader
                 sectionKey: "receiver"
-                label: "4. Receiver"
+                label: "3. Receiver"
               }
 
               Column {
@@ -2715,7 +2831,7 @@ Item {
                 AccordionHeader {
                   id: connectionHeader
                   sectionKey: "connection"
-                  label: "5. Connection Setup"
+                  label: "4. Connection Setup"
                 }
                 Item {
                   id: connectionSetupBody
@@ -2734,7 +2850,7 @@ Item {
                 AccordionHeader {
                   id: privacyHeader
                   sectionKey: "privacy"
-                  label: "6. Privacy"
+                  label: "5. Privacy"
                 }
                 Item {
                   id: privacyBody
@@ -2753,7 +2869,7 @@ Item {
                 AccordionHeader {
                   id: diagnosticsHeader
                   sectionKey: "diagnostics"
-                  label: "7. Diagnostics & Contributing"
+                  label: "6. Diagnostics & Contributing"
                 }
                 Item {
                   id: diagnosticsBody
@@ -2772,7 +2888,7 @@ Item {
                 AccordionHeader {
                   id: removalHeader
                   sectionKey: "removal"
-                  label: "8. Removal"
+                  label: "7. Removal"
                 }
                 Item {
                   id: removalBody
@@ -3061,6 +3177,29 @@ Item {
     }
   }
 
+  component FixedSectionHeader: Rectangle {
+    required property string label
+    width: content.width
+    implicitHeight: fixedHeaderText.implicitHeight + Style.space(20)
+    radius: Style.cornerRadius
+    color: Util.alpha(root.foreground, root.activeSection === "sources" ? 0.10 : 0.035)
+
+    Text {
+      id: fixedHeaderText
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      anchors.leftMargin: Style.space(12)
+      anchors.rightMargin: Style.space(12)
+      text: parent.label
+      color: root.activeSection === "sources" ? Color.accent : root.foreground
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.title
+      font.bold: true
+      elide: Text.ElideRight
+    }
+  }
+
   component AccordionHeader: Button {
     required property string sectionKey
     required property string label
@@ -3086,7 +3225,8 @@ Item {
     required property int rowIndex
     readonly property bool checked: root.sourceSelected(sourceData.id)
     readonly property bool selectionEnabled: root.sourceSelectionEnabled(sourceData)
-    hasCursor: root.cursorActive && root.focusSection === "sources" && root.focusIndex === rowIndex
+    hasCursor: root.cursorActive && root.focusSection === "sources"
+      && root.focusIndex === rowIndex + root.sourceFocusOffset()
     current: checked
     foreground: root.foreground
     onHasCursorChanged: if (hasCursor) root.scheduleFocusScroll()
@@ -3164,7 +3304,7 @@ Item {
       onContainsMouseChanged: if (containsMouse) {
         root.cursorActive = true
         root.focusSection = "sources"
-        root.focusIndex = row.rowIndex
+        root.focusIndex = row.rowIndex + root.sourceFocusOffset()
         root.focusColumn = 0
         root.activeSection = "sources"
       }
@@ -3205,8 +3345,8 @@ Item {
     foreground: root.foreground
     fontFamily: root.fontFamily
     selected: root.destination === value
-    hasCursor: root.cursorActive && root.focusSection === "session"
-      && root.focusIndex === 1 && root.focusColumn === rowIndex
+    hasCursor: root.cursorActive && root.focusSection === "sources"
+      && root.focusIndex === 0 && root.focusColumn === rowIndex
     onHasCursorChanged: if (hasCursor) root.scheduleFocusScroll()
     onClicked: root.chooseDestination(value)
   }
@@ -3249,9 +3389,8 @@ Item {
     text: label
     foreground: root.foreground
     fontFamily: root.fontFamily
-    selected: rowIndex === 2 && root.activeSession
-    hasCursor: rowIndex >= 0 && root.cursorActive && root.focusSection === "session"
-      && root.focusIndex === 0 && root.focusColumn === rowIndex
+    selected: false
+    hasCursor: false
     onHasCursorChanged: if (hasCursor) root.scheduleFocusScroll()
     onClicked: pressed()
   }
