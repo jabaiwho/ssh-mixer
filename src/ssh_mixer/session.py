@@ -19,7 +19,6 @@ from .audio import (
     matchers_for_source_ids,
     parse_pactl_objects,
     resolve_source_ids,
-    resolve_source_matchers,
 )
 from .config import (
     DEFAULT_RECEIVER_COMMAND,
@@ -43,7 +42,13 @@ from .connections import (
 )
 from .diagnostics import DiagnosticStore, redact
 from .openssh_profiles import inspect_profile, profile_connection
-from .routing import DEFAULT_MIX_SINK, RoutingError, build_route_plan
+from .routing import (
+    DEFAULT_MIX_SINK,
+    RoutingError,
+    build_playback_reconciliation,
+    build_route_plan,
+    resolve_session_source_ids,
+)
 from .streaming import StreamEpochPolicy, StreamSilenceState, build_encoder_command
 from .versions import PROTOCOL_VERSION
 
@@ -112,7 +117,13 @@ def stopped_state(error: str = "") -> dict[str, Any]:
 
 
 def empty_resources() -> dict[str, Any]:
-    return {"modules": [], "movedSinkInputs": [], "processes": [], "mixSink": ""}
+    return {
+        "modules": [],
+        "movedSinkInputs": [],
+        "processes": [],
+        "mixSink": "",
+        "defaultSink": "",
+    }
 
 
 def process_identity(pid: int, *, proc_root: Path = Path("/proc")) -> dict[str, Any] | None:
@@ -257,6 +268,14 @@ def sink_exists(name: str) -> bool:
     return False
 
 
+def default_sink_name() -> str:
+    completed = run_pactl(["get-default-sink"])
+    name = completed.stdout.strip()
+    if not name:
+        raise SessionError("pactl did not report a default sink")
+    return name
+
+
 def source_exists(name: str) -> bool:
     completed = run_pactl(["list", "short", "sources"], check=False)
     if completed.returncode != 0:
@@ -311,6 +330,12 @@ def cleanup_resources(state: dict[str, Any]) -> None:
         if modules_result.returncode == 0
         else []
     )
+    default_result = run_pactl(["get-default-sink"], check=False)
+    restore_tracked_default = (
+        default_result.returncode == 0
+        and bool(mix_sink)
+        and default_result.stdout.strip() == mix_sink
+    )
     mix_sink_ids = {
         str(sink.get("id", "")) for sink in sinks if _field(sink, "Name") == mix_sink
     }
@@ -333,6 +358,15 @@ def cleanup_resources(state: dict[str, Any]) -> None:
         module_id = str(tracked.get("id", ""))
         if any(_module_is_owned(module, module_id, mix_sink) for module in modules):
             unload_module(module_id)
+
+    default_sink = str(resources.get("defaultSink", ""))
+    if (
+        restore_tracked_default
+        and default_sink
+        and default_sink != mix_sink
+        and sink_exists(default_sink)
+    ):
+        run_pactl(["set-default-sink", default_sink], check=False)
 
 
 def cleanup_named_mix(mix_sink: str = DEFAULT_MIX_SINK) -> None:
@@ -691,8 +725,12 @@ class SessionWorker:
         }
         write_state(self.current_state)
 
-    def _track_module(self, module_id: str, role: str) -> None:
-        self.resources["modules"].append({"id": str(module_id), "role": role})
+    def _track_module(
+        self, module_id: str, role: str, **details: str
+    ) -> None:
+        tracked = {"id": str(module_id), "role": role}
+        tracked.update({key: str(value) for key, value in details.items() if value})
+        self.resources["modules"].append(tracked)
         self._write_state(str(self.current_state.get("state", "starting")))
 
     def _track_move(self, sink_input_id: str, original_sink: str) -> None:
@@ -715,6 +753,7 @@ class SessionWorker:
             sink = str(operation["sink"])
             self.resources["mixSink"] = sink
             if sink_exists(sink):
+                self._restore_local_default_sink(sink)
                 return
             completed = run_pactl(
                 [
@@ -728,6 +767,7 @@ class SessionWorker:
             if not module_id:
                 raise SessionError("pactl did not return a module id for the mix sink")
             self._track_module(module_id, "mix-sink")
+            self._restore_local_default_sink(sink)
             return
 
         if op == "move-sink-input":
@@ -756,13 +796,18 @@ class SessionWorker:
             module_id = completed.stdout.strip()
             if not module_id:
                 raise SessionError("pactl did not return a module id for a loopback")
-            self._track_module(module_id, role)
+            self._track_module(module_id, role, source=source, sink=sink)
             return
 
         if op == "stream-remote":
             return
 
         raise SessionError(f"unknown routing operation: {op}")
+
+    def _restore_local_default_sink(self, mix_sink: str) -> None:
+        default_sink = str(self.resources.get("defaultSink", ""))
+        if default_sink and default_sink != mix_sink:
+            run_pactl(["set-default-sink", default_sink])
 
     def _start_pipeline(self, capture_source: str, remote: dict[str, Any]) -> None:
         require_commands(["ffmpeg", "ssh"])
@@ -813,6 +858,53 @@ class SessionWorker:
         ]
         self.children = []
 
+    def _reconcile_playback_sources(self) -> None:
+        matchers = self.config.get("sourceMatchers", [])
+        if not any(
+            isinstance(matcher, dict) and matcher.get("kind") == "playback"
+            for matcher in matchers
+        ):
+            return
+        sources = discover_sources()
+        routed_ids = {
+            str(moved.get("sinkInputId", ""))
+            for moved in self.resources.get("movedSinkInputs", [])
+            if isinstance(moved, dict)
+        }
+        local_copy_sinks = {
+            str(module.get("sink", ""))
+            for module in self.resources.get("modules", [])
+            if isinstance(module, dict)
+            and module.get("role") == "preserve-local-playback"
+            and module.get("sink")
+        }
+        operations = build_playback_reconciliation(
+            sources,
+            matchers,
+            destination=str(self.config.get("destination", "both")),
+            routed_sink_input_ids=routed_ids,
+            local_copy_sinks=local_copy_sinks,
+        )
+        moved_source_ids: set[str] = set()
+        for operation in operations:
+            self._apply_operation(operation)
+            if operation.get("op") == "move-sink-input":
+                moved_source_ids.add(str(operation.get("sourceId", "")))
+        if moved_source_ids:
+            selected = [
+                source
+                for source in self.current_state.get("selectedInputs", [])
+                if isinstance(source, dict)
+            ]
+            selected_ids = {str(source.get("id", "")) for source in selected}
+            selected.extend(
+                source
+                for source in sources
+                if str(source.get("id", "")) in moved_source_ids - selected_ids
+            )
+            self.current_state["selectedInputs"] = selected
+            self._write_state(str(self.current_state.get("state", "streaming")))
+
     def _run_pipeline_epochs(
         self, capture_source: str, remote: dict[str, Any]
     ) -> tuple[int, str]:
@@ -859,6 +951,7 @@ class SessionWorker:
     def _wait_for_pipeline(self) -> tuple[int, str, str]:
         ffmpeg, ssh = self.children
         epoch = StreamEpochPolicy(started_at=time.monotonic())
+        next_reconciliation_at = epoch.started_at
         silence = StreamSilenceState()
         ssh_diagnostics = ""
         while not self.stop_requested:
@@ -874,9 +967,13 @@ class SessionWorker:
                 if ffmpeg_code not in (None, 0):
                     return int(ffmpeg_code), f"ffmpeg exited with status {ffmpeg_code}", ""
                 return 0, "", ""
+            now = time.monotonic()
+            if now >= next_reconciliation_at:
+                self._reconcile_playback_sources()
+                next_reconciliation_at = now + 0.5
             silence_started = silence.feed(read_encoder_diagnostics(ffmpeg.stderr))
             refresh_reason = epoch.refresh_reason(
-                now=time.monotonic(),
+                now=now,
                 silence_active=silence.active or silence_started,
             )
             if refresh_reason:
@@ -909,27 +1006,20 @@ class SessionWorker:
         try:
             sources = discover_sources()
             concrete_ids = resolve_source_ids(sources, self.config.get("sourceIds", []))
-            if concrete_ids:
-                current_matchers = matchers_for_source_ids(sources, concrete_ids)
-                approved_matchers = self.config.get("sourceMatchers", [])
-                if any(matcher not in approved_matchers for matcher in current_matchers):
-                    raise RoutingError(
-                        "a selected source changed identity before Session start"
-                    )
-            if not concrete_ids:
-                resolution = resolve_source_matchers(
-                    sources, self.config.get("sourceMatchers", [])
-                )
-                if resolution["missingMatchers"] or resolution["ambiguousMatchers"]:
-                    raise RoutingError(
-                        "saved Source Matchers are missing or ambiguous; review the mixer"
-                    )
-                concrete_ids = resolution["selectedIds"]
+            resolution = resolve_session_source_ids(
+                sources,
+                self.config.get("sourceMatchers", []),
+                concrete_ids,
+            )
+            concrete_ids = resolution["sourceIds"]
             plan = build_route_plan(
                 sources,
                 concrete_ids,
                 str(self.config.get("destination", "both")),
+                armed_playback=bool(resolution["armedPlayback"]),
             )
+            if plan["destination"] != "local":
+                self.resources["defaultSink"] = default_sink_name()
             self.config["sourceIds"] = concrete_ids
             self._write_state("starting", plan=plan)
             if self.verbose_diagnostics:

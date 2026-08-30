@@ -8,6 +8,7 @@ import re
 import shutil
 import socket
 import subprocess
+import unicodedata
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,8 @@ PROFILE_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 USER_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$")
 DNS_LABEL_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 KEY_TYPE_RE = re.compile(r"^(?:ssh-|ecdsa-)[A-Za-z0-9@._+-]+$")
+MAX_SAVED_CONNECTIONS = 32
+MAX_RECEIVER_NAME_LENGTH = 60
 
 
 class ConnectionError(ValueError):
@@ -37,6 +40,33 @@ def _valid_host(host: str) -> bool:
     except ValueError:
         pass
     return all(DNS_LABEL_RE.fullmatch(label) for label in candidate.rstrip(".").split("."))
+
+
+def _default_receiver_name(value: dict[str, Any]) -> str:
+    connection_type = str(value.get("type", "")).strip().lower()
+    if connection_type == "openssh-profile":
+        profile = str(value.get("profile", "")).strip()
+        if profile:
+            return profile
+    host = str(value.get("host", "")).strip().rstrip(".")
+    if not host:
+        return "Receiver"
+    try:
+        ipaddress.ip_address(host.strip("[]"))
+        return host
+    except ValueError:
+        return host.split(".", 1)[0]
+
+
+def normalize_receiver_name(value: Any, connection: dict[str, Any]) -> str:
+    name = str(value or "").strip() or _default_receiver_name(connection)
+    if len(name) > MAX_RECEIVER_NAME_LENGTH:
+        raise ConnectionError(
+            f"Receiver name must be at most {MAX_RECEIVER_NAME_LENGTH} characters"
+        )
+    if any(unicodedata.category(character).startswith("C") for character in name):
+        raise ConnectionError("Receiver name contains control characters")
+    return name
 
 
 def normalize_connection(value: dict[str, Any]) -> dict[str, Any]:
@@ -114,7 +144,59 @@ def normalize_connection(value: dict[str, Any]) -> dict[str, Any]:
                 "effectiveConfigHash": effective_hash,
             }
         )
+    normalized["receiverName"] = normalize_receiver_name(
+        value.get("receiverName"), normalized
+    )
     return normalized
+
+
+def normalize_connections(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    connections: list[dict[str, Any]] = []
+    for raw in value[:MAX_SAVED_CONNECTIONS]:
+        try:
+            connection = normalize_connection(raw)
+        except ConnectionError:
+            continue
+        connections = upsert_connection(connections, connection)
+    return connections
+
+
+def upsert_connection(
+    connections: list[dict[str, Any]], connection: dict[str, Any]
+) -> list[dict[str, Any]]:
+    normalized = normalize_connection(connection)
+    item_id = connection_id(normalized)
+    result = [
+        normalize_connection(item)
+        for item in connections
+        if connection_id(item) != item_id
+    ]
+    result.append(normalized)
+    if len(result) > MAX_SAVED_CONNECTIONS:
+        result = result[-MAX_SAVED_CONNECTIONS:]
+    return result
+
+
+def find_connection(
+    connections: list[dict[str, Any]], item_id: str
+) -> dict[str, Any]:
+    for connection in connections:
+        normalized = normalize_connection(connection)
+        if connection_id(normalized) == str(item_id):
+            return normalized
+    raise ConnectionError("saved Connection was not found")
+
+
+def rename_connection(
+    connections: list[dict[str, Any]], item_id: str, receiver_name: Any
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    current = find_connection(connections, item_id)
+    renamed = normalize_connection(
+        {**current, "receiverName": normalize_receiver_name(receiver_name, current)}
+    )
+    return upsert_connection(connections, renamed), renamed
 
 
 def discover_tailscale_peers() -> list[dict[str, Any]]:

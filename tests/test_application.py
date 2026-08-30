@@ -48,7 +48,7 @@ class ApplicationTest(unittest.TestCase):
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["schemaVersion"], 1)
-        self.assertEqual(result["config"]["schemaVersion"], 2)
+        self.assertEqual(result["config"]["schemaVersion"], 3)
         self.assertEqual(result["config"]["sourceIds"], [])
         self.assertEqual(result["config"]["sourceMatchers"], [])
         self.assertEqual(result["config"]["mixProfiles"], [])

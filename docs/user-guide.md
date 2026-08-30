@@ -41,7 +41,7 @@ On first run:
 
 1. Review this guide, the unsandboxed-plugin warning, and the panel's privacy lifecycle controls.
 2. If a personal pre-public configuration is detected, complete [legacy migration](#legacy-migration) before starting a new Session.
-3. Choose and verify a Connection.
+3. Choose and verify a Connection, then give its Receiver a recognizable local name.
 4. For a Tailscale or Direct SSH Connection, plan and approve the correct platform's Companion Setup to obtain a receiver-only Managed Identity.
 5. Select current audio Sources. Capture Sources are microphones or other direct inputs and require explicit selection.
 6. Optionally run the bounded quiet test.
@@ -49,6 +49,8 @@ On first run:
 8. Confirm the persistent bar indicator appears for the entire active Session.
 
 ## Choose a Connection
+
+The Mixer view selects which saved Connection receives the next Session. Receiver names such as **Gaming PC** are editable local presentation metadata; renaming one does not change its host trust, address, or Managed Identity. Normal mixer and bar presentation uses the Receiver name, while the full address remains in Receiver details. Stop an active Session before switching Receivers.
 
 ### Tailscale Connection — recommended
 
@@ -86,11 +88,11 @@ Review platform-specific permissions in [the security model](security-model.md#r
 
 ## Select Sources and Route Mode
 
-- **Playback Source:** one application's current output.
+- **Playback Source:** one logical application choice, such as Chromium or Spotify.
 - **Capture Source:** a microphone or other direct audio input.
-- **Output Monitor:** a passive tap of audio already playing through an output.
+- **Output Monitor:** a passive tap of audio already playing through an output. The primary monitor is **Desktop (All)**.
 
-Numeric PipeWire/PulseAudio IDs are runtime-only. Saved Source Matchers use stable metadata and restore only an exactly unique Playback Source or Output Monitor. Capture matchers are recent-choice hints only and never reselect a microphone.
+Numeric PipeWire/PulseAudio IDs are runtime-only. An explicitly selected Playback Source persists through its stable Source Matcher, remains visible while inactive, and may match several current application streams. During a Session, newly appearing matching streams attach automatically while unselected applications remain on the normal local output. Output Monitors still require an unambiguous device match. Capture matchers are recent-choice hints only and never reselect a microphone.
 
 Route Modes:
 
@@ -126,7 +128,7 @@ Wake, unlock, login, source discovery, panel open, profile load, and network rec
 
 A Mix Profile stores a Connection, Route Mode, Source Matchers, privacy policy, bitrate, and timeout. Loading one opens the mixer and never starts it.
 
-Playback-only profiles may expose **Quick Start**. Quick Start itself is an explicit click and proceeds only if every source has one unique current match and no Session is already active. Profiles with Capture, missing sources, or ambiguous sources open the mixer for review instead of starting.
+Playback-only profiles may expose **Quick Start**. Quick Start itself is an explicit click; an inactive Playback Source starts armed and attaches when the application begins audio. A current Playback Source may have several matching streams. Profiles with Capture or a missing/ambiguous device Source open the mixer for review instead of starting.
 
 ## Legacy migration
 

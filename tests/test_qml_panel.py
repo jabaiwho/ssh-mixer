@@ -20,6 +20,15 @@ class PanelRuntimeSafetyTest(unittest.TestCase):
         self.assertIn("var connection = root.connection || ({})", PANEL)
         self.assertIn("enabled: !!root.windowsSetupPlan", PANEL)
 
+    def test_compact_views_use_logical_sources_and_named_receivers(self) -> None:
+        self.assertIn('property string currentView: "mixer"', PANEL)
+        self.assertIn('function viewOrder() { return ["mixer", "receivers", "profiles", "settings"] }', PANEL)
+        self.assertIn("data.sourceChoices instanceof Array", PANEL)
+        self.assertIn("sourceChoiceIds: selectedIds.slice()", PANEL)
+        self.assertIn('proc.command = [backend, "connection-select"', PANEL)
+        self.assertIn('proc.command = [backend, "connection-rename"', PANEL)
+        self.assertIn('placeholderText: "Receiver name"', PANEL)
+
 
 if __name__ == "__main__":
     unittest.main()

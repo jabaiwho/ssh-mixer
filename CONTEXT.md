@@ -9,8 +9,12 @@ A remote Windows, Linux, or macOS computer that plays audio sent by SSH-mixer.
 _Avoid_: Destination, target, host
 
 **Connection**:
-A saved, verified way to reach one receiver, including its connection type, host trust, and identity policy.
+A saved, verified way to reach one receiver, including its connection type, host trust, and identity policy. One receiver may have more than one connection.
 _Avoid_: Provider, remote config
+
+**Receiver Name**:
+An editable local nickname used to identify a receiver in the mixer and persistent bar without exposing its full connection address. It does not participate in connection or trust identity.
+_Avoid_: Hostname, source name
 
 **Tailscale Connection**:
 A connection whose receiver identity and resolved address are verified against the user's current tailnet.
@@ -52,16 +56,20 @@ _Avoid_: Setup password
 Whether selected audio remains local, is sent to a receiver, or does both.
 _Avoid_: Destination mode
 
+**Source**:
+Local audio that can be selected for routing.
+_Avoid_: Receiver, remote PC
+
 **Playback Source**:
-An application's audio output that can be selected for routing.
-_Avoid_: Channel, sink input
+A logical local application choice that may have zero, one, or several current audio streams. Once explicitly selected, it remains armed while inactive and attaches matching streams when they appear.
+_Avoid_: Channel, sink input, process ID
 
 **Capture Source**:
 A direct audio input such as a microphone.
 _Avoid_: Input channel
 
 **Output Monitor**:
-A passive source representing audio already being played through a local output device.
+A passive source representing audio already being played through a local output device. The primary output monitor is presented as **Desktop (All)**.
 _Avoid_: Microphone, playback source
 
 **Source Matcher**:

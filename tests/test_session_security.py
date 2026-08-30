@@ -28,6 +28,229 @@ import ssh_mixer.session as session_module
 
 
 class SessionSecurityTest(unittest.TestCase):
+    def test_worker_preserves_the_local_default_sink_while_streaming(self) -> None:
+        source = {
+            "id": "sink-input:101",
+            "type": "playback",
+            "pulseId": "101",
+            "name": "Chromium",
+            "applicationName": "Chromium",
+            "processBinary": "chromium",
+            "label": "Chromium",
+            "sinkName": "alsa_output.headset",
+            "sinkLabel": "Headset",
+        }
+        config = {
+            "destination": "both",
+            "sourceIds": ["sink-input:101"],
+            "sourceMatchers": [
+                {
+                    "schemaVersion": 1,
+                    "kind": "playback",
+                    "applicationName": "Chromium",
+                    "processBinary": "chromium",
+                }
+            ],
+            "remote": {},
+        }
+        pulse = {"defaultSink": "alsa_output.headset", "nextModule": 5}
+
+        def pactl(
+            args: list[str], check: bool = True
+        ) -> subprocess.CompletedProcess[str]:
+            stdout = ""
+            if args == ["get-default-sink"]:
+                stdout = str(pulse["defaultSink"]) + "\n"
+            elif args == ["list", "short", "sinks"]:
+                stdout = "10\talsa_output.headset\n"
+            elif args == ["list", "short", "sources"]:
+                stdout = "11\tssh_mixer_mix.monitor\n"
+            elif args[:2] == ["load-module", "module-null-sink"]:
+                pulse["defaultSink"] = "ssh_mixer_mix"
+                stdout = str(pulse["nextModule"])
+                pulse["nextModule"] = int(pulse["nextModule"]) + 1
+            elif args[:2] == ["load-module", "module-loopback"]:
+                stdout = str(pulse["nextModule"])
+                pulse["nextModule"] = int(pulse["nextModule"]) + 1
+            elif args[:1] == ["set-default-sink"]:
+                pulse["defaultSink"] = args[1]
+            return subprocess.CompletedProcess(
+                args=args, returncode=0, stdout=stdout, stderr=""
+            )
+
+        def observe_streaming(_capture: str, _remote: dict[str, object]) -> tuple[int, str]:
+            self.assertEqual(pulse["defaultSink"], "alsa_output.headset")
+            return 0, ""
+
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(Path(temp) / "config"),
+                "XDG_DATA_HOME": str(Path(temp) / "data"),
+                "XDG_STATE_HOME": str(Path(temp) / "state"),
+                "XDG_RUNTIME_DIR": str(Path(temp) / "runtime"),
+            },
+            clear=False,
+        ):
+            worker = SessionWorker(config, "test-session", foreground=True)
+            with patch("ssh_mixer.session.signal.signal"), patch(
+                "ssh_mixer.session.require_commands"
+            ), patch(
+                "ssh_mixer.session.discover_sources", return_value=[source]
+            ), patch(
+                "ssh_mixer.session.run_pactl", side_effect=pactl
+            ), patch.object(
+                worker, "_start_pipeline"
+            ), patch.object(
+                worker, "_run_pipeline_epochs", side_effect=observe_streaming
+            ), patch.object(
+                worker, "_cleanup"
+            ):
+                exit_code = worker.run()
+
+        self.assertEqual(exit_code, 0, worker.current_state["error"])
+
+    def test_worker_starts_with_an_armed_inactive_playback_source(self) -> None:
+        config = {
+            "destination": "both",
+            "sourceIds": [],
+            "sourceMatchers": [
+                {
+                    "schemaVersion": 1,
+                    "kind": "playback",
+                    "applicationName": "Chromium",
+                    "processBinary": "chromium",
+                }
+            ],
+            "remote": {},
+        }
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(Path(temp) / "config"),
+                "XDG_DATA_HOME": str(Path(temp) / "data"),
+                "XDG_STATE_HOME": str(Path(temp) / "state"),
+                "XDG_RUNTIME_DIR": str(Path(temp) / "runtime"),
+            },
+            clear=False,
+        ):
+            worker = SessionWorker(config, "test-session", foreground=True)
+            with patch("ssh_mixer.session.signal.signal"), patch(
+                "ssh_mixer.session.require_commands"
+            ), patch(
+                "ssh_mixer.session.discover_sources", return_value=[]
+            ), patch(
+                "ssh_mixer.session.default_sink_name",
+                return_value="alsa_output.headset",
+            ), patch.object(
+                worker, "_apply_operation"
+            ), patch.object(
+                worker, "_start_pipeline"
+            ) as start_pipeline, patch.object(
+                worker, "_run_pipeline_epochs", return_value=(0, "")
+            ), patch.object(
+                worker, "_cleanup"
+            ):
+                exit_code = worker.run()
+
+        self.assertEqual(exit_code, 0, worker.current_state["error"])
+        start_pipeline.assert_called_once_with("ssh_mixer_mix.monitor", {})
+
+    def test_worker_attaches_a_late_armed_stream_but_leaves_other_apps_local(self) -> None:
+        chromium = {
+            "id": "sink-input:201",
+            "type": "playback",
+            "pulseId": "201",
+            "name": "Chromium",
+            "applicationName": "Chromium",
+            "processBinary": "chromium",
+            "label": "Chromium",
+            "sinkName": "alsa_output.headset",
+            "sinkLabel": "Headset",
+        }
+        spotify = {
+            "id": "sink-input:202",
+            "type": "playback",
+            "pulseId": "202",
+            "name": "Spotify",
+            "applicationName": "Spotify",
+            "processBinary": "spotify",
+            "label": "Spotify",
+            "sinkName": "alsa_output.headset",
+            "sinkLabel": "Headset",
+        }
+        config = {
+            "destination": "both",
+            "sourceIds": [],
+            "sourceMatchers": [
+                {
+                    "schemaVersion": 1,
+                    "kind": "playback",
+                    "applicationName": "Chromium",
+                    "processBinary": "chromium",
+                }
+            ],
+            "remote": {},
+        }
+        ffmpeg = Mock(pid=10, stderr=object())
+        ffmpeg.poll.side_effect = [None, 0]
+        ssh = Mock(pid=11, stderr=object())
+        ssh.poll.return_value = None
+        applied: list[dict[str, object]] = []
+
+        def start_pipeline(_capture: str, _remote: dict[str, object]) -> None:
+            worker.children = [ffmpeg, ssh]
+
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(Path(temp) / "config"),
+                "XDG_DATA_HOME": str(Path(temp) / "data"),
+                "XDG_STATE_HOME": str(Path(temp) / "state"),
+                "XDG_RUNTIME_DIR": str(Path(temp) / "runtime"),
+            },
+            clear=False,
+        ):
+            worker = SessionWorker(config, "test-session", foreground=True)
+            with patch("ssh_mixer.session.signal.signal"), patch(
+                "ssh_mixer.session.require_commands"
+            ), patch(
+                "ssh_mixer.session.discover_sources",
+                side_effect=[[], [chromium, spotify]],
+            ), patch(
+                "ssh_mixer.session.default_sink_name",
+                return_value="alsa_output.headset",
+            ), patch(
+                "ssh_mixer.session.read_encoder_diagnostics", return_value=""
+            ), patch(
+                "ssh_mixer.session.time.monotonic", return_value=100.0
+            ), patch(
+                "ssh_mixer.session.time.sleep"
+            ), patch.object(
+                worker, "_apply_operation", side_effect=applied.append
+            ), patch.object(
+                worker, "_start_pipeline", side_effect=start_pipeline
+            ), patch.object(
+                worker, "_cleanup"
+            ):
+                exit_code = worker.run()
+
+        self.assertEqual(exit_code, 0, worker.current_state["error"])
+        late_operations = [
+            operation
+            for operation in applied
+            if operation.get("sourceId") == "sink-input:201"
+            or operation.get("role") == "preserve-local-playback"
+        ]
+        self.assertEqual([operation["op"] for operation in late_operations], [
+            "load-loopback",
+            "move-sink-input",
+        ])
+        self.assertNotIn(
+            "sink-input:202",
+            [operation.get("sourceId") for operation in applied],
+        )
+
     def test_stream_pipeline_processes_are_detached_and_headless(self) -> None:
         ffmpeg = Mock(pid=10, stdout=Mock(), stderr=Mock())
         ssh = Mock(pid=11)
@@ -216,6 +439,48 @@ class SessionSecurityTest(unittest.TestCase):
         self.assertNotIn(["move-sink-input", "101", "original"], calls)
         self.assertIn(["unload-module", "5"], calls)
         self.assertNotIn(["unload-module", "7"], calls)
+
+    def test_cleanup_preserves_a_newer_user_selected_default_sink(self) -> None:
+        calls: list[list[str]] = []
+
+        def pactl(
+            args: list[str], check: bool = True
+        ) -> subprocess.CompletedProcess[str]:
+            calls.append(args)
+            outputs = {
+                ("get-default-sink",): "alsa_output.new-choice\n",
+                ("list", "sinks"): (
+                    "Sink #20\n    Name: ssh_mixer_mix\n"
+                    "Sink #30\n    Name: alsa_output.original\n"
+                    "Sink #40\n    Name: alsa_output.new-choice\n"
+                ),
+                ("list", "sink-inputs"): "",
+                ("list", "modules"): "",
+                ("list", "short", "sinks"): (
+                    "30\talsa_output.original\n40\talsa_output.new-choice\n"
+                ),
+            }
+            return subprocess.CompletedProcess(
+                args=args,
+                returncode=0,
+                stdout=outputs.get(tuple(args), ""),
+                stderr="",
+            )
+
+        state = {
+            "resources": {
+                "mixSink": "ssh_mixer_mix",
+                "defaultSink": "alsa_output.original",
+                "movedSinkInputs": [],
+                "modules": [],
+            }
+        }
+        with patch("ssh_mixer.session.run_pactl", side_effect=pactl):
+            cleanup_resources(state)
+
+        self.assertNotIn(
+            ["set-default-sink", "alsa_output.original"], calls
+        )
 
     def test_reused_pid_does_not_match_a_tracked_process(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

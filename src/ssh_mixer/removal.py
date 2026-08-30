@@ -58,9 +58,10 @@ def _plan_hash(plan: dict[str, Any]) -> str:
 
 
 def _connection_label(connection: dict[str, Any]) -> str:
-    if connection.get("type") == "openssh-profile":
-        return f"OpenSSH profile {connection.get('profile', '')}"
-    return f"{connection.get('user', '')}@{connection.get('host', '')}"
+    try:
+        return str(normalize_connection(connection)["receiverName"])
+    except ValueError:
+        return "Receiver"
 
 
 @contextmanager
@@ -490,6 +491,12 @@ class RemovalService:
             config["remote"]["host"] = ""
             config["remote"]["user"] = ""
             config["remote"]["keyPath"] = ""
+        config["connections"] = [
+            connection
+            for connection in config.get("connections", [])
+            if not isinstance(connection, dict)
+            or connection_id(connection) != item_id
+        ]
         config["mixProfiles"] = [
             profile
             for profile in config.get("mixProfiles", [])
@@ -501,6 +508,7 @@ class RemovalService:
             not isinstance(connection, dict) or connection_id(connection) != item_id
             for connection in [
                 load_config().get("connection"),
+                *load_config().get("connections", []),
                 *[
                     profile.get("connection")
                     for profile in load_config().get("mixProfiles", [])
@@ -544,6 +552,9 @@ class RemovalService:
         current = config.get("connection")
         if isinstance(current, dict):
             candidates.append((current, str(config.get("remote", {}).get("keyPath", ""))))
+        for connection in config.get("connections", []):
+            if isinstance(connection, dict):
+                candidates.append((connection, ""))
         for profile in config.get("mixProfiles", []):
             if isinstance(profile, dict) and isinstance(profile.get("connection"), dict):
                 candidates.append((profile["connection"], ""))

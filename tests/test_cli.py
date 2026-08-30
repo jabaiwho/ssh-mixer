@@ -42,7 +42,7 @@ class CliPlanTest(unittest.TestCase):
         parsed = json.loads(completed.stdout)
         self.assertTrue(parsed["ok"])
         self.assertEqual(parsed["schemaVersion"], 1)
-        self.assertEqual(parsed["config"]["schemaVersion"], 2)
+        self.assertEqual(parsed["config"]["schemaVersion"], 3)
         self.assertEqual(parsed["config"]["remote"]["host"], "")
 
     def test_cli_failures_include_a_structured_diagnostic_stage(self) -> None:

@@ -70,7 +70,9 @@ def _legacy_reasons(raw: dict[str, Any] | None, *, exists: bool) -> list[str]:
         schema = int(raw.get("schemaVersion", 0))
     except (TypeError, ValueError):
         schema = 0
-    if schema < CONFIG_SCHEMA_VERSION:
+    # Schema v2 already has the hardened Connection and Source Matcher model;
+    # v3 only adds a normalized saved-Connection collection.
+    if schema < 2:
         reasons.append("schema-before-v2")
     if "sourceIds" in raw:
         reasons.append("temporary-source-ids")

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 APP_ID = "ssh-mixer"
-CONFIG_SCHEMA_VERSION = 2
+CONFIG_SCHEMA_VERSION = 3
 STATE_SCHEMA_VERSION = 1
 PRIVATE_DIR_MODE = 0o700
 PRIVATE_FILE_MODE = 0o600
@@ -24,6 +24,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "sourceMatchers": [],
     "destination": "both",
     "connection": None,
+    "connections": [],
     "privacy": {
         "lockBehavior": "stop-all",
         "showReceiverLabel": False,
@@ -274,11 +275,20 @@ def normalize_config(config: dict[str, Any] | None) -> dict[str, Any]:
             if matcher not in source_matchers:
                 source_matchers.append(matcher)
 
+    from .connections import normalize_connection, normalize_connections, upsert_connection
+
     connection = None
     if isinstance(merged.get("connection"), dict):
-        from .connections import normalize_connection
-
         connection = normalize_connection(merged["connection"])
+
+    mix_profiles = normalize_mix_profiles(merged.get("mixProfiles"))
+    connections = normalize_connections(merged.get("connections"))
+    if connection is not None:
+        connections = upsert_connection(connections, connection)
+    for profile in mix_profiles:
+        profile_connection = profile.get("connection")
+        if isinstance(profile_connection, dict):
+            connections = upsert_connection(connections, profile_connection)
 
     remote = remote_config(merged)
     if connection is not None:
@@ -293,8 +303,9 @@ def normalize_config(config: dict[str, Any] | None) -> dict[str, Any]:
         "sourceMatchers": source_matchers,
         "destination": destination,
         "connection": connection,
+        "connections": connections,
         "privacy": normalize_privacy(merged.get("privacy")),
-        "mixProfiles": normalize_mix_profiles(merged.get("mixProfiles")),
+        "mixProfiles": mix_profiles,
         "remote": remote,
     }
 
@@ -317,6 +328,8 @@ def config_from_payload(payload: dict[str, Any], base: dict[str, Any] | None = N
 
     if "connection" in payload:
         incoming["connection"] = payload["connection"]
+    if "connections" in payload:
+        incoming["connections"] = payload["connections"]
     if "privacy" in payload:
         incoming["privacy"] = payload["privacy"]
     if "mixProfiles" in payload:
@@ -355,4 +368,21 @@ def public_config(config: dict[str, Any]) -> dict[str, Any]:
 
     normalized = normalize_config(config)
     normalized["remote"]["keyPath"] = str(normalized["remote"].get("keyPath", ""))
+    from .connections import connection_id
+
+    active = normalized.get("connection")
+    active_id = connection_id(active) if isinstance(active, dict) else ""
+    normalized["connections"] = [
+        {
+            **connection,
+            "connectionId": connection_id(connection),
+            "selected": connection_id(connection) == active_id,
+        }
+        for connection in normalized.get("connections", [])
+    ]
+    if isinstance(active, dict):
+        normalized["connection"] = {
+            **active,
+            "connectionId": active_id,
+        }
     return normalized

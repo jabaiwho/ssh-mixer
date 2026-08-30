@@ -18,7 +18,10 @@ Item {
   property var sources: []
   property var selectedIds: []
   property var recentCaptureIds: []
+  property var connections: []
   property var mixProfiles: []
+  property string currentView: "mixer"
+  property string receiverNameDraft: ""
   property string mixProfileName: ""
   property var migration: ({ detected: false, reasons: [], choices: [] })
   property var migrationPlan: null
@@ -48,6 +51,7 @@ Item {
   property bool quietAudibleConfirmed: false
   property string setupType: "tailscale"
   property string setupPeerId: ""
+  property string setupReceiverName: ""
   property string setupHost: ""
   property string setupUser: ""
   property string setupPort: "22"
@@ -89,10 +93,49 @@ Item {
     return "Stopped"
   }
   readonly property string remoteSummary: {
+    if (connection && connection.receiverName) return String(connection.receiverName)
+    var host = String(remote.host || "")
+    if (!host) return "No Receiver"
+    return host.split(".", 1)[0]
+  }
+  readonly property string remoteAddressSummary: {
     var host = String(remote.host || "")
     var user = String(remote.user || "")
     if (!host) return "Not configured"
     return user ? (user + "@" + host) : host
+  }
+
+  function viewOrder() { return ["mixer", "receivers", "profiles", "settings"] }
+
+  function switchView(direction) {
+    var views = viewOrder()
+    var index = views.indexOf(currentView)
+    if (index < 0) index = 0
+    currentView = views[(index + direction + views.length) % views.length]
+    focusSection = currentView === "mixer" ? "receivers" : currentView
+    focusIndex = 0
+    cursorActive = true
+    Qt.callLater(function() { flick.contentY = 0 })
+  }
+
+  function showView(view) {
+    var index = viewOrder().indexOf(String(view))
+    if (index < 0 || currentView === view) return
+    currentView = String(view)
+    focusSection = currentView === "mixer" ? "receivers" : currentView
+    focusIndex = 0
+    cursorActive = true
+    Qt.callLater(function() { flick.contentY = 0 })
+  }
+
+  function ensureVisible(item) {
+    if (!item || !flick || !content) return
+    var point = item.mapToItem(content, 0, 0)
+    var top = point.y
+    var bottom = top + item.height
+    if (top < flick.contentY) flick.contentY = Math.max(0, top - Style.space(8))
+    else if (bottom > flick.contentY + flick.height)
+      flick.contentY = Math.min(flick.contentHeight - flick.height, bottom - flick.height + Style.space(8))
   }
 
   function open(payloadJson) {
@@ -103,7 +146,10 @@ Item {
       destination = normalizeDestination(payload.destination)
       configurationDirty = true
     }
-    if (payload.sourceIds instanceof Array) {
+    if (payload.sourceChoiceIds instanceof Array) {
+      selectedIds = payload.sourceChoiceIds.slice()
+      configurationDirty = true
+    } else if (payload.sourceIds instanceof Array) {
       selectedIds = payload.sourceIds.slice()
       configurationDirty = true
     }
@@ -161,7 +207,7 @@ Item {
   }
 
   function requestSessionRestart() {
-    pendingSession = { destination: destination, sourceIds: selectedIds.slice() }
+    pendingSession = { destination: destination, sourceChoiceIds: selectedIds.slice() }
     message = "Applying " + destination.toUpperCase() + "…"
     if (!busy) run("stop", {})
   }
@@ -189,7 +235,8 @@ Item {
       peerId: setupType === "tailscale" ? setupPeerId : "",
       host: setupHost,
       user: setupUser,
-      port: Number(setupPort || "22")
+      port: Number(setupPort || "22"),
+      receiverName: String(setupReceiverName || "").trim()
     }
   }
 
@@ -197,6 +244,20 @@ Item {
     setupType = "tailscale"
     setupPeerId = String(peer.id || "")
     setupHost = String(peer.host || "")
+    if (!setupReceiverName) setupReceiverName = String(peer.label || peer.host || "")
+  }
+
+  function selectConnection(savedConnection) {
+    if (!savedConnection || savedConnection.selected || activeSession) return
+    run("connectionSelect", { connectionId: String(savedConnection.connectionId || "") })
+  }
+
+  function renameReceiver() {
+    if (!connection || !String(receiverNameDraft || "").trim()) return
+    run("connectionRename", {
+      connectionId: String(connection.connectionId || ""),
+      receiverName: String(receiverNameDraft).trim()
+    })
   }
 
   function profileSummary() {
@@ -422,7 +483,7 @@ Item {
       name: String(mixProfileName).trim(),
       connection: connection,
       routeMode: destination,
-      sourceIds: selectedIds.slice(),
+      sourceChoiceIds: selectedIds.slice(),
       privacy: privacy,
       stream: {
         bitrate: String(remote.bitrate || "128k"),
@@ -444,12 +505,12 @@ Item {
   }
 
   function testConnection() {
-    run("test", { destination: destination, sourceIds: selectedIds })
+    run("test", { destination: destination })
   }
 
   function start() {
     pendingSession = null
-    run("start", { destination: destination, sourceIds: selectedIds })
+    run("start", { destination: destination, sourceChoiceIds: selectedIds.slice() })
   }
 
   function stop() {
@@ -606,6 +667,12 @@ Item {
     } else if (kind === "connectionSave") {
       proc.command = [backend, "connection-save", "--json", JSON.stringify(payload || {})]
       message = "Saving the verified connection…"
+    } else if (kind === "connectionSelect") {
+      proc.command = [backend, "connection-select", "--json", JSON.stringify(payload || {})]
+      message = "Selecting Receiver…"
+    } else if (kind === "connectionRename") {
+      proc.command = [backend, "connection-rename", "--json", JSON.stringify(payload || {})]
+      message = "Renaming Receiver…"
     } else if (kind === "diagnosticsPreview") {
       proc.command = [backend, "diagnostics-preview"]
       if (payload && payload.includeLogs) proc.command.push("--include-logs")
@@ -628,21 +695,29 @@ Item {
 
   function applySnapshot(data) {
     recentCaptureIds = []
-    if (data.sources instanceof Array) sources = data.sources.slice()
+    if (data.sourceChoices instanceof Array) sources = data.sourceChoices.slice()
     if (data.status) status = data.status
     if (data.config) {
       if (!configurationDirty) {
         destination = normalizeDestination(data.config.destination)
-        if (data.config.sourceIds instanceof Array) selectedIds = data.config.sourceIds.slice()
+        var selected = []
+        for (var i = 0; i < sources.length; i++) {
+          if (sources[i].selected === true) selected.push(String(sources[i].id))
+          if (sources[i].recentChoice === true) recentCaptureIds.push(String(sources[i].id))
+        }
+        selectedIds = selected
       }
       if (data.config.remote) remote = data.config.remote
       if (data.config.privacy) privacy = data.config.privacy
+      if (data.config.connections instanceof Array) connections = data.config.connections.slice()
       if (data.config.mixProfiles instanceof Array) mixProfiles = data.config.mixProfiles.slice()
-      if (data.config.connection) {
-        connection = data.config.connection
+      connection = data.config.connection || null
+      if (connection) {
+        receiverNameDraft = String(connection.receiverName || "")
         setupType = String(connection.type || "direct")
         setupPeerId = String(connection.peerId || "")
         setupProfile = String(connection.profile || "")
+        setupReceiverName = String(connection.receiverName || "")
         setupHost = String(connection.host || "")
         setupUser = String(connection.user || "")
         setupPort = String(connection.port || "22")
@@ -662,6 +737,15 @@ Item {
   function applyStatus(data) {
     if (data.status) status = data.status
     if (data.config && data.config.remote) remote = data.config.remote
+  }
+
+  function applyConnectionConfig(data) {
+    if (data.config) {
+      if (data.config.remote) remote = data.config.remote
+      if (data.config.connections instanceof Array) connections = data.config.connections.slice()
+      connection = data.config.connection || data.connection || null
+    } else connection = data.connection || connection
+    receiverNameDraft = String(connection && connection.receiverName || "")
   }
 
   function handleResult(exitCode) {
@@ -810,7 +894,8 @@ Item {
     if (action === "mixProfileLoad" || action === "mixProfileQuickStart") {
       if (data.config) {
         destination = normalizeDestination(data.config.destination)
-        selectedIds = data.config.sourceIds instanceof Array ? data.config.sourceIds.slice() : []
+        selectedIds = []
+        configurationDirty = false
         if (data.config.remote) remote = data.config.remote
         if (data.config.connection) connection = data.config.connection
       }
@@ -844,8 +929,7 @@ Item {
     }
     if (action === "macosSetup") {
       if (data.ok) {
-        connection = data.connection
-        if (data.config && data.config.remote) remote = data.config.remote
+        applyConnectionConfig(data)
         macosSetupPlan = null
         message = "Experimental macOS Receiver restrictions verified; real-device compatibility remains unverified"
       } else if (data.setup && data.setup.rollbackIncomplete) {
@@ -865,8 +949,7 @@ Item {
     }
     if (action === "windowsSetup") {
       if (data.ok) {
-        connection = data.connection
-        if (data.config && data.config.remote) remote = data.config.remote
+        applyConnectionConfig(data)
         windowsSetupPlan = null
         message = "Windows Receiver installed with non-elevated runtime and forced-command restrictions verified"
       } else if (data.setup && data.setup.rollbackIncomplete) {
@@ -907,8 +990,7 @@ Item {
     }
     if (action === "linuxSetup") {
       if (data.ok) {
-        connection = data.connection
-        if (data.config && data.config.remote) remote = data.config.remote
+        applyConnectionConfig(data)
         linuxSetupPlan = null
         message = "Linux Receiver installed and forced-command restrictions verified"
       } else if (data.setup && data.setup.rollbackIncomplete) {
@@ -927,9 +1009,8 @@ Item {
     }
     if (action === "profileSave") {
       if (data.ok) {
-        connection = data.connection
+        applyConnectionConfig(data)
         pendingProfile = null
-        if (data.config && data.config.remote) remote = data.config.remote
         message = "User-managed OpenSSH profile saved"
       } else message = data.error || procErr || "Could not save the OpenSSH profile"
       return
@@ -959,10 +1040,30 @@ Item {
     }
     if (action === "connectionSave") {
       if (data.ok) {
-        connection = data.connection
+        connection = data.config && data.config.connection ? data.config.connection : data.connection
         if (data.config && data.config.remote) remote = data.config.remote
-        message = "Verified connection saved"
-      } else message = data.error || procErr || "Could not save connection"
+        message = "Verified Connection saved"
+        Qt.callLater(function() { root.refresh() })
+      } else message = data.error || procErr || "Could not save Connection"
+      return
+    }
+    if (action === "connectionSelect") {
+      if (data.ok && data.config) {
+        connection = data.config.connection
+        remote = data.config.remote
+        connections = data.config.connections instanceof Array ? data.config.connections.slice() : []
+        receiverNameDraft = String(connection.receiverName || "")
+        message = "Receiver selected: " + receiverNameDraft
+      } else message = data.error || procErr || "Could not select Receiver"
+      return
+    }
+    if (action === "connectionRename") {
+      if (data.ok && data.config) {
+        connection = data.config.connection
+        connections = data.config.connections instanceof Array ? data.config.connections.slice() : []
+        receiverNameDraft = String(connection && connection.receiverName || "")
+        message = "Receiver renamed"
+      } else message = data.error || procErr || "Could not rename Receiver"
       return
     }
     if (action === "diagnosticsPreview") {
@@ -991,13 +1092,19 @@ Item {
   }
 
   function sectionLength(section) {
+    if (section === "receivers") return Math.max(1, connections.length)
     if (section === "inputs") return Math.max(1, sources.length)
     if (section === "destination") return 3
     if (section === "actions") return 3
+    if (section === "profiles") return Math.max(1, mixProfiles.length)
+    if (section === "settings") return 1
     return 0
   }
 
-  function sectionOrder() { return ["inputs", "destination", "actions"] }
+  function sectionOrder() {
+    if (currentView === "mixer") return ["receivers", "inputs", "destination", "actions"]
+    return [currentView]
+  }
 
   function clampCursor() {
     var max = sectionLength(focusSection) - 1
@@ -1009,10 +1116,16 @@ Item {
     cursorActive = true
     var sections = sectionOrder()
     var s = sections.indexOf(focusSection)
-    if (s < 0) { focusSection = "inputs"; focusIndex = 0; return }
-    if (dx !== 0 && focusSection === "destination") {
-      focusIndex = Math.max(0, Math.min(2, focusIndex + dx))
-      chooseDestination(["local", "ssh", "both"][focusIndex])
+    if (s < 0) { focusSection = sectionOrder()[0]; focusIndex = 0; return }
+    if (dx !== 0) {
+      if (focusSection === "destination") {
+        focusIndex = Math.max(0, Math.min(2, focusIndex + dx))
+        chooseDestination(["local", "ssh", "both"][focusIndex])
+      } else switchView(dx)
+      return
+    }
+    if (currentView === "settings") {
+      flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height, flick.contentY + dy * Style.space(56)))
       return
     }
     if (dy > 0) {
@@ -1035,8 +1148,12 @@ Item {
 
   function activateCursor() {
     cursorActive = true
-    if (focusSection === "inputs" && sources.length > 0) toggleSource(sources[focusIndex].id)
-    else if (focusSection === "destination") chooseDestination(["local", "ssh", "both"][focusIndex])
+    if (focusSection === "receivers" && connections.length > 0) selectConnection(connections[focusIndex])
+    else if (focusSection === "inputs" && sources.length > 0) toggleSource(sources[focusIndex].id)
+    else if (focusSection === "profiles" && mixProfiles.length > 0) {
+      var profile = mixProfiles[focusIndex]
+      profile.quickStartEnabled ? quickStartMixProfile(profile) : openMixProfile(profile)
+    } else if (focusSection === "destination") chooseDestination(["local", "ssh", "both"][focusIndex])
     else if (focusSection === "actions") {
       if (focusIndex === 0) refresh()
       else if (focusIndex === 1) testConnection()
@@ -1076,6 +1193,10 @@ Item {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
+      blocked: setupNameEditor.activeFocus || setupHostEditor.activeFocus
+        || setupUserEditor.activeFocus || setupPortEditor.activeFocus
+        || profileNameEditor.activeFocus || receiverNameEditor.activeFocus
+        || diagnosticEditor.activeFocus
       onMoveRequested: function(dx, dy) { root.moveCursor(dx, dy) }
       onActivateRequested: root.activateCursor()
       onCloseRequested: root.dismiss()
@@ -1161,6 +1282,25 @@ Item {
 
               PanelSeparator { foreground: root.foreground; width: parent.width }
 
+              RowLayout {
+                width: parent.width
+                spacing: Style.space(6)
+                Repeater {
+                  model: root.viewOrder()
+                  StableButton {
+                    required property string modelData
+                    Layout.fillWidth: true
+                    text: modelData === "mixer" ? "Mixer"
+                      : (modelData === "receivers" ? "Receivers"
+                        : (modelData === "profiles" ? "Profiles" : "Settings"))
+                    foreground: root.foreground
+                    fontFamily: root.fontFamily
+                    selected: root.currentView === modelData
+                    onClicked: root.showView(modelData)
+                  }
+                }
+              }
+
               Column {
                 width: parent.width
                 visible: root.migration.detected === true
@@ -1242,9 +1382,9 @@ Item {
 
               Column {
                 width: parent.width
-                visible: !root.migration.detected && !root.connection && !root.remote.host
+                visible: !root.migration.detected && root.currentView === "receivers"
                 spacing: Style.space(8)
-                PanelSectionHeader { text: "RECEIVER SETUP"; foreground: root.foreground; fontFamily: root.fontFamily }
+                PanelSectionHeader { text: "ADD CONNECTION"; foreground: root.foreground; fontFamily: root.fontFamily }
 
                 Text {
                   width: parent.width
@@ -1331,6 +1471,16 @@ Item {
                 }
 
                 TextField {
+                  id: setupNameEditor
+                  visible: root.setupType !== "openssh-profile"
+                  width: parent.width
+                  placeholderText: "Receiver name (for example, Gaming PC)"
+                  text: root.setupReceiverName
+                  onTextChanged: root.setupReceiverName = text
+                }
+
+                TextField {
+                  id: setupHostEditor
                   visible: root.setupType === "direct"
                   width: parent.width
                   placeholderText: "Receiver hostname or IP address"
@@ -1343,12 +1493,14 @@ Item {
                   width: parent.width
                   spacing: Style.space(8)
                   TextField {
+                    id: setupUserEditor
                     Layout.fillWidth: true
                     placeholderText: "Remote username"
                     text: root.setupUser
                     onTextChanged: root.setupUser = text
                   }
                   TextField {
+                    id: setupPortEditor
                     Layout.preferredWidth: Style.space(80)
                     placeholderText: "Port"
                     text: root.setupPort
@@ -1422,20 +1574,57 @@ Item {
               }
 
               PanelSeparator {
-                visible: !root.connection && !root.remote.host
+                visible: root.currentView === "receivers"
                 foreground: root.foreground
                 width: parent.width
               }
 
               Column {
                 width: parent.width
+                visible: root.currentView === "mixer"
                 spacing: Style.space(8)
-                PanelSectionHeader { text: "INPUTS"; foreground: root.foreground; fontFamily: root.fontFamily }
+                PanelSectionHeader { text: "RECEIVER"; foreground: root.foreground; fontFamily: root.fontFamily }
+                Text {
+                  visible: root.connections.length === 0
+                  width: parent.width
+                  text: "Add a Receiver before streaming remotely."
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  wrapMode: Text.WordWrap
+                }
+                Repeater {
+                  model: root.connections
+                  ReceiverButton {
+                    required property var modelData
+                    required property int index
+                    width: content.width
+                    receiverData: modelData
+                    rowIndex: index
+                  }
+                }
+                Text {
+                  visible: root.activeSession && root.connections.length > 1
+                  width: parent.width
+                  text: "Stop before changing Receiver."
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                }
+              }
+
+              PanelSeparator { visible: root.currentView === "mixer"; foreground: root.foreground; width: parent.width }
+
+              Column {
+                width: parent.width
+                visible: root.currentView === "mixer"
+                spacing: Style.space(8)
+                PanelSectionHeader { text: "SOURCES"; foreground: root.foreground; fontFamily: root.fontFamily }
 
                 Text {
                   visible: root.sources.length === 0
                   width: parent.width
-                  text: root.busy ? "Looking for PipeWire/PulseAudio sources…" : "No useful inputs found. Start cliamp playback or refresh."
+                  text: root.busy ? "Finding audio sources…" : "No audio sources found."
                   color: root.dim
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.bodySmall
@@ -1454,10 +1643,11 @@ Item {
                 }
               }
 
-              PanelSeparator { foreground: root.foreground; width: parent.width }
+              PanelSeparator { visible: root.currentView === "profiles"; foreground: root.foreground; width: parent.width }
 
               Column {
                 width: parent.width
+                visible: root.currentView === "profiles"
                 spacing: Style.space(8)
                 PanelSectionHeader { text: "MIX PROFILES"; foreground: root.foreground; fontFamily: root.fontFamily }
                 Text {
@@ -1472,14 +1662,12 @@ Item {
                   model: root.mixProfiles
                   RowLayout {
                     required property var modelData
+                    required property int index
                     width: parent.width
                     spacing: Style.space(8)
-                    ActionButton {
-                      label: modelData.quickStartEnabled ? ("Quick Start · " + modelData.name) : ("Open · " + modelData.name)
-                      rowIndex: -1
-                      onPressed: modelData.quickStartEnabled
-                        ? root.quickStartMixProfile(modelData)
-                        : root.openMixProfile(modelData)
+                    ProfileButton {
+                      profileData: modelData
+                      rowIndex: index
                       Layout.fillWidth: true
                     }
                     Text {
@@ -1496,6 +1684,7 @@ Item {
                   width: parent.width
                   spacing: Style.space(8)
                   TextField {
+                    id: profileNameEditor
                     Layout.fillWidth: true
                     placeholderText: "New Mix Profile name"
                     text: root.mixProfileName
@@ -1510,12 +1699,13 @@ Item {
                 }
               }
 
-              PanelSeparator { foreground: root.foreground; width: parent.width }
+              PanelSeparator { visible: root.currentView === "mixer"; foreground: root.foreground; width: parent.width }
 
               Column {
                 width: parent.width
+                visible: root.currentView === "mixer"
                 spacing: Style.space(8)
-                PanelSectionHeader { text: "DESTINATION"; foreground: root.foreground; fontFamily: root.fontFamily }
+                PanelSectionHeader { text: "ROUTE"; foreground: root.foreground; fontFamily: root.fontFamily }
                 RowLayout {
                   width: parent.width
                   spacing: Style.space(8)
@@ -1525,18 +1715,26 @@ Item {
                 }
                 Text {
                   width: parent.width
-                  text: "Microphones are never fed into local speakers by SSH-mixer; Local leaves normal capture availability alone."
+                  text: "Capture Sources are never played through local speakers."
                   color: root.dim
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
                   wrapMode: Text.WordWrap
                 }
+                RowLayout {
+                  width: parent.width
+                  spacing: Style.space(8)
+                  ActionButton { label: "Refresh"; rowIndex: 0; onPressed: root.refresh(); Layout.fillWidth: true }
+                  ActionButton { label: "Test"; rowIndex: 1; onPressed: root.testConnection(); Layout.fillWidth: true }
+                  ActionButton { label: root.activeSession ? "Stop" : "Start"; rowIndex: 2; onPressed: root.activeSession ? root.stop() : root.start(); Layout.fillWidth: true }
+                }
               }
 
-              PanelSeparator { foreground: root.foreground; width: parent.width }
+              PanelSeparator { visible: root.currentView === "settings"; foreground: root.foreground; width: parent.width }
 
               Column {
                 width: parent.width
+                visible: root.currentView === "settings"
                 spacing: Style.space(8)
                 PanelSectionHeader { text: "PRIVACY LIFECYCLE"; foreground: root.foreground; fontFamily: root.fontFamily }
                 Text {
@@ -1583,15 +1781,36 @@ Item {
                 }
               }
 
-              PanelSeparator { foreground: root.foreground; width: parent.width }
+              PanelSeparator { visible: root.currentView === "receivers"; foreground: root.foreground; width: parent.width }
 
               Column {
                 width: parent.width
+                visible: root.currentView === "receivers"
                 spacing: Style.space(8)
-                PanelSectionHeader { text: "REMOTE"; foreground: root.foreground; fontFamily: root.fontFamily }
+                PanelSectionHeader { text: "RECEIVER DETAILS"; foreground: root.foreground; fontFamily: root.fontFamily }
+                RowLayout {
+                  visible: !!root.connection
+                  width: parent.width
+                  spacing: Style.space(8)
+                  TextField {
+                    id: receiverNameEditor
+                    Layout.fillWidth: true
+                    placeholderText: "Receiver name"
+                    text: root.receiverNameDraft
+                    onTextChanged: root.receiverNameDraft = text
+                    onAccepted: root.renameReceiver()
+                  }
+                  ActionButton {
+                    label: "Rename"
+                    rowIndex: -1
+                    enabled: String(root.receiverNameDraft || "").trim() !== ""
+                    onPressed: root.renameReceiver()
+                    Layout.preferredWidth: Style.space(100)
+                  }
+                }
                 Text {
                   width: parent.width
-                  text: root.remoteSummary + " via Opus/Ogg over SSH"
+                  text: root.remoteAddressSummary + " via Opus/Ogg over SSH"
                   color: root.foreground
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.body
@@ -2130,10 +2349,11 @@ Item {
                 }
               }
 
-              PanelSeparator { foreground: root.foreground; width: parent.width }
+              PanelSeparator { visible: root.currentView === "settings"; foreground: root.foreground; width: parent.width }
 
               Column {
                 width: parent.width
+                visible: root.currentView === "settings"
                 spacing: Style.space(8)
                 PanelSectionHeader { text: "VERIFIED REMOVAL"; foreground: root.foreground; fontFamily: root.fontFamily }
                 Text {
@@ -2281,6 +2501,7 @@ Item {
 
               Column {
                 width: parent.width
+                visible: root.currentView === "settings"
                 spacing: Style.space(8)
 
                 PanelSectionHeader { text: "DIAGNOSTICS & CONTRIBUTING"; foreground: root.foreground; fontFamily: root.fontFamily }
@@ -2353,7 +2574,8 @@ Item {
 
               Text {
                 width: parent.width
-                text: "Selected: " + (root.selectedLabels() || "none") + " • Destination: " + root.destination.toUpperCase()
+                visible: root.currentView === "mixer"
+                text: "Selected: " + (root.selectedLabels() || "none") + " • Route: " + root.destination.toUpperCase()
                 color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.caption
@@ -2374,6 +2596,7 @@ Item {
     hasCursor: root.cursorActive && root.focusSection === "inputs" && root.focusIndex === rowIndex
     current: checked
     foreground: root.foreground
+    onHasCursorChanged: if (hasCursor) Qt.callLater(function() { root.ensureVisible(row) })
     implicitHeight: inner.implicitHeight + Style.spacing.xl
 
     RowLayout {
@@ -2436,6 +2659,32 @@ Item {
     }
   }
 
+  component ReceiverButton: StableButton {
+    required property var receiverData
+    required property int rowIndex
+    text: String(receiverData.receiverName || "Receiver") + (receiverData.selected ? "  ✓" : "")
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    selected: receiverData.selected === true
+    enabled: !root.activeSession || selected
+    hasCursor: root.cursorActive && root.focusSection === "receivers" && root.focusIndex === rowIndex
+    onHasCursorChanged: if (hasCursor) Qt.callLater(function() { root.ensureVisible(this) })
+    onClicked: root.selectConnection(receiverData)
+  }
+
+  component ProfileButton: StableButton {
+    required property var profileData
+    required property int rowIndex
+    text: profileData.quickStartEnabled ? ("Quick Start · " + profileData.name) : ("Open · " + profileData.name)
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    hasCursor: root.cursorActive && root.focusSection === "profiles" && root.focusIndex === rowIndex
+    onHasCursorChanged: if (hasCursor) Qt.callLater(function() { root.ensureVisible(this) })
+    onClicked: profileData.quickStartEnabled
+      ? root.quickStartMixProfile(profileData)
+      : root.openMixProfile(profileData)
+  }
+
   component DestinationButton: StableButton {
     required property string label
     required property string value
@@ -2445,6 +2694,7 @@ Item {
     fontFamily: root.fontFamily
     selected: root.destination === value
     hasCursor: root.cursorActive && root.focusSection === "destination" && root.focusIndex === rowIndex
+    onHasCursorChanged: if (hasCursor) Qt.callLater(function() { root.ensureVisible(this) })
     onClicked: root.chooseDestination(value)
   }
 
@@ -2487,6 +2737,7 @@ Item {
     fontFamily: root.fontFamily
     selected: rowIndex === 2 && root.activeSession
     hasCursor: rowIndex >= 0 && root.cursorActive && root.focusSection === "actions" && root.focusIndex === rowIndex
+    onHasCursorChanged: if (hasCursor) Qt.callLater(function() { root.ensureVisible(this) })
     onClicked: pressed()
   }
 }
