@@ -673,6 +673,83 @@ class SessionSecurityTest(unittest.TestCase):
             for path in (state_path(), log_path, lock_path()):
                 self.assertEqual(path.stat().st_mode & 0o777, 0o600, str(path))
 
+    def test_start_preserves_inactive_playback_matchers_with_active_sources(self) -> None:
+        active_source = {
+            "id": "sink-input:301",
+            "type": "playback",
+            "pulseId": "301",
+            "name": "cliamp",
+            "applicationName": "cliamp",
+            "processBinary": "cliamp",
+            "label": "cliamp",
+            "sinkName": "alsa_output.headset",
+            "sinkLabel": "Headset",
+        }
+        active_matcher = {
+            "schemaVersion": 1,
+            "kind": "playback",
+            "applicationName": "cliamp",
+            "processBinary": "cliamp",
+        }
+        inactive_matcher = {
+            "schemaVersion": 1,
+            "kind": "playback",
+            "applicationName": "Chromium",
+            "processBinary": "chromium",
+        }
+        config = {
+            "schemaVersion": 1,
+            "sourceIds": ["sink-input:301"],
+            "sourceMatchers": [active_matcher, inactive_matcher],
+            "destination": "local",
+            "remote": {},
+        }
+        stopped = {"state": "stopped", "active": False, "resources": {}}
+        streaming = {
+            "state": "local",
+            "active": True,
+            "sessionId": "fixed-session",
+            "resources": {},
+        }
+        process = Mock()
+        process.poll.return_value = None
+        inherited_fds: list[int] = []
+
+        def launch_worker(*_args: object, **kwargs: object) -> Mock:
+            inherited_fds.extend(os.dup(fd) for fd in kwargs.get("pass_fds", ()))
+            return process
+
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(Path(temp) / "config"),
+                "XDG_DATA_HOME": str(Path(temp) / "data"),
+                "XDG_STATE_HOME": str(Path(temp) / "state"),
+                "XDG_RUNTIME_DIR": str(Path(temp) / "runtime"),
+            },
+            clear=False,
+        ), patch("ssh_mixer.session.require_lifecycle_monitor"), patch(
+            "ssh_mixer.session.require_commands"
+        ), patch(
+            "ssh_mixer.session.cleanup_resources"
+        ), patch("ssh_mixer.session.cleanup_named_mix"), patch(
+            "ssh_mixer.session.discover_sources", return_value=[active_source]
+        ), patch(
+            "ssh_mixer.session.normalize_status", side_effect=[stopped, streaming]
+        ), patch("ssh_mixer.session.time.sleep"), patch(
+            "ssh_mixer.session.uuid.uuid4", return_value=SimpleNamespace(hex="fixed-session")
+        ), patch("ssh_mixer.session.subprocess.Popen", side_effect=launch_worker), patch(
+            "ssh_mixer.session.save_config"
+        ) as save_config:
+            result = start_session(config)
+
+        for fd in inherited_fds:
+            os.close(fd)
+        saved = save_config.call_args.args[0]
+        self.assertEqual(result["sessionId"], "fixed-session")
+        self.assertEqual(saved["sourceIds"], ["sink-input:301"])
+        self.assertEqual(saved["sourceMatchers"], [active_matcher, inactive_matcher])
+
     def test_detached_worker_configuration_is_not_exposed_in_argv(self) -> None:
         config = {
             "schemaVersion": 1,
