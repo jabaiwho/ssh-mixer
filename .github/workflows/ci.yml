@@ -28,6 +28,8 @@ jobs:
           sudo apt-get install --yes --no-install-recommends \
             ffmpeg \
             qml6-module-qtqml-workerscript \
+            qml6-module-qtquick \
+            qml6-module-qtquick-window \
             qt6-declarative-dev-tools
 
       - name: Parse QML entry points
