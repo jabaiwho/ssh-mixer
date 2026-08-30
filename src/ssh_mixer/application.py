@@ -6,6 +6,7 @@ from typing import Any
 
 from .audio import discover_sources as default_discover_sources
 from .audio import (
+    enforce_desktop_all_exclusivity,
     matchers_for_source_ids,
     resolve_source_ids,
     resolve_source_matchers,
@@ -234,8 +235,13 @@ class MixerApplication:
                         stage="application.configure",
                         code="invalid-request",
                     )
+                sources = self._discover_sources()
+                normalized_ids = enforce_desktop_all_exclusivity(
+                    sources, [str(item) for item in source_ids]
+                )
+                configured_payload["sourceIds"] = normalized_ids
                 configured_payload["sourceMatchers"] = matchers_for_source_ids(
-                    self._discover_sources(), [str(item) for item in source_ids]
+                    sources, normalized_ids
                 )
             config = config_from_payload(configured_payload)
             save_config(config)

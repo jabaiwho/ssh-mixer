@@ -5,8 +5,10 @@ import json
 from typing import Any
 
 from .audio import (
+    enforce_desktop_all_exclusivity,
     friendly_app_label,
     friendly_device_label,
+    is_desktop_all_source,
     is_internal_playback_loopback,
     matcher_for_source,
     normalize_source_matcher,
@@ -125,6 +127,19 @@ def build_source_choices(
     matchers, members_by_id = _choice_groups(
         sources, selected + pinned + recent
     )
+    exclusive_selected = next(
+        (
+            matcher
+            for matcher in selected
+            if any(
+                is_desktop_all_source(member)
+                for member in members_by_id.get(_choice_id(matcher), [])
+            )
+        ),
+        None,
+    )
+    if exclusive_selected is not None:
+        selected = [exclusive_selected]
     choices: list[dict[str, Any]] = []
     for matcher in matchers:
         choice_id = _choice_id(matcher)
@@ -145,6 +160,9 @@ def build_source_choices(
                 "recent": matcher in recent,
                 "recentChoice": remembered and kind == "capture",
                 "sensitiveCapture": kind == "capture",
+                "exclusiveSelection": any(
+                    is_desktop_all_source(member) for member in members
+                ),
             }
         )
     choices.sort(
@@ -181,4 +199,16 @@ def resolve_choice_ids(
             source_id = str(source.get("id", ""))
             if source_id and source_id not in source_ids:
                 source_ids.append(source_id)
+    source_ids = enforce_desktop_all_exclusivity(sources, source_ids)
+    desktop_all = next(
+        (
+            source
+            for source in sources
+            if str(source.get("id", "")) in source_ids
+            and is_desktop_all_source(source)
+        ),
+        None,
+    )
+    if desktop_all is not None:
+        resolved_matchers = [matcher_for_source(desktop_all)]
     return {"sourceMatchers": resolved_matchers, "sourceIds": source_ids}

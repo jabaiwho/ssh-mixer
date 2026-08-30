@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import unittest
 
-from ssh_mixer.routing import build_playback_reconciliation, build_route_plan
+from ssh_mixer.audio import matcher_for_source
+from ssh_mixer.routing import (
+    build_playback_reconciliation,
+    build_route_plan,
+    resolve_session_source_ids,
+)
 
 SOURCES = [
     {
@@ -32,6 +37,7 @@ SOURCES = [
         "type": "monitor",
         "name": "alsa_output.headset.monitor",
         "label": "Default output monitor",
+        "isDefaultMonitor": True,
     },
 ]
 
@@ -58,6 +64,46 @@ class RoutePlanTest(unittest.TestCase):
         preserve = [op for op in plan["operations"] if op.get("role") == "preserve-local-playback"]
         self.assertEqual(len(preserve), 1)
         self.assertEqual(preserve[0]["sink"], "alsa_output.headset")
+
+    def test_desktop_all_excludes_playback_that_would_create_both_mode_feedback(self) -> None:
+        plan = build_route_plan(
+            SOURCES,
+            ["sink-input:101", "source:monitor"],
+            "both",
+        )
+
+        self.assertEqual(
+            [source["id"] for source in plan["selectedInputs"]],
+            ["source:monitor"],
+        )
+        self.assertEqual(
+            [operation["op"] for operation in plan["operations"]],
+            ["load-null-sink", "load-loopback", "stream-remote"],
+        )
+        self.assertNotIn(
+            "preserve-local-playback",
+            [operation.get("role") for operation in plan["operations"]],
+        )
+
+    def test_session_resolution_disarms_playback_when_desktop_all_is_selected(self) -> None:
+        playback = dict(
+            SOURCES[0],
+            name="player.node",
+            applicationName="Example Player",
+            processBinary="example-player",
+        )
+        monitor = SOURCES[3]
+        resolution = resolve_session_source_ids(
+            [playback, monitor],
+            [matcher_for_source(playback), matcher_for_source(monitor)],
+            [playback["id"], monitor["id"]],
+        )
+
+        self.assertEqual(resolution["sourceIds"], ["source:monitor"])
+        self.assertEqual(
+            resolution["sourceMatchers"], [matcher_for_source(monitor)]
+        )
+        self.assertFalse(resolution["armedPlayback"])
 
     def test_ssh_mode_does_not_preserve_selected_playback_locally(self) -> None:
         plan = build_route_plan(SOURCES, ["sink-input:101"], "ssh")

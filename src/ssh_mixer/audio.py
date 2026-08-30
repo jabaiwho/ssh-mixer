@@ -352,6 +352,28 @@ def normalize_source_matcher(value: Any) -> dict[str, Any]:
     return matcher
 
 
+def is_desktop_all_source(source: dict[str, Any]) -> bool:
+    return source.get("type") == "monitor" and source.get("isDefaultMonitor") is True
+
+
+def enforce_desktop_all_exclusivity(
+    sources: list[dict[str, Any]], source_ids: list[str]
+) -> list[str]:
+    """Make the default Output Monitor exclusive without using temporary ids."""
+
+    by_id = {
+        str(source.get("id", "")): source
+        for source in sources
+        if source.get("id")
+    }
+    unique_ids = list(dict.fromkeys(str(source_id) for source_id in source_ids))
+    for source_id in unique_ids:
+        source = by_id.get(source_id)
+        if source is not None and is_desktop_all_source(source):
+            return [source_id]
+    return unique_ids
+
+
 def matcher_for_source(source: dict[str, Any]) -> dict[str, Any]:
     """Create a persistent matcher without PulseAudio/PipeWire numeric ids."""
 
@@ -418,6 +440,7 @@ def resolve_source_matchers(
             continue
         if source_id and source_id not in selected_ids:
             selected_ids.append(source_id)
+    selected_ids = enforce_desktop_all_exclusivity(sources, selected_ids)
     # Capture policy applies even while a remembered device is missing.
     has_capture = has_capture or any(matcher["kind"] == "capture" for matcher in normalized)
     return {
@@ -434,7 +457,7 @@ def matchers_for_source_ids(
     sources: list[dict[str, Any]], source_ids: list[str]
 ) -> list[dict[str, Any]]:
     matchers: list[dict[str, Any]] = []
-    for source_id in source_ids:
+    for source_id in enforce_desktop_all_exclusivity(sources, source_ids):
         source = find_source(sources, str(source_id))
         if source is None:
             raise ValueError("one or more selected sources are no longer available")

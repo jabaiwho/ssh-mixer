@@ -1012,6 +1012,7 @@ class SessionWorker:
                 concrete_ids,
             )
             concrete_ids = resolution["sourceIds"]
+            self.config["sourceMatchers"] = resolution["sourceMatchers"]
             plan = build_route_plan(
                 sources,
                 concrete_ids,
@@ -1160,10 +1161,13 @@ def start_session(config: dict[str, Any]) -> dict[str, Any]:
             concrete_ids = resolve_source_ids(available_sources, source_ids)
             if len(concrete_ids) != len(dict.fromkeys(map(str, source_ids))):
                 raise SessionError("one or more selected sources are no longer available")
-            config["sourceIds"] = concrete_ids
-            config["sourceMatchers"] = matchers_for_source_ids(
-                available_sources, concrete_ids
+            resolution = resolve_session_source_ids(
+                available_sources,
+                matchers_for_source_ids(available_sources, concrete_ids),
+                concrete_ids,
             )
+            config["sourceIds"] = resolution["sourceIds"]
+            config["sourceMatchers"] = resolution["sourceMatchers"]
         save_config(config)
         session_id = uuid.uuid4().hex
         config_read_fd, config_write_fd = os.pipe()

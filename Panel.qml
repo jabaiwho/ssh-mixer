@@ -255,6 +255,18 @@ Item {
     return selectedIds.indexOf(String(id)) >= 0
   }
 
+  function desktopAllSelected() {
+    for (var i = 0; i < sources.length; i++) {
+      if (sources[i].exclusiveSelection === true && sourceSelected(sources[i].id))
+        return true
+    }
+    return false
+  }
+
+  function sourceSelectionEnabled(source) {
+    return source && (source.exclusiveSelection === true || !desktopAllSelected())
+  }
+
   function pinSource(source) {
     if (!source) return
     run("sourcePin", {
@@ -269,9 +281,18 @@ Item {
 
   function toggleSource(id) {
     id = String(id)
+    var source = null
+    for (var i = 0; i < sources.length; i++) {
+      if (String(sources[i].id) === id) {
+        source = sources[i]
+        break
+      }
+    }
     var list = selectedIds.slice()
     var pos = list.indexOf(id)
     if (pos >= 0) list.splice(pos, 1)
+    else if (source && source.exclusiveSelection === true) list = [id]
+    else if (desktopAllSelected()) return
     else list.push(id)
     selectedIds = list
     configurationDirty = true
@@ -1319,8 +1340,8 @@ Item {
     cursorActive = true
     if (focusSection === "sources" && visibleSourceChoices().length > 0) {
       var source = visibleSourceChoices()[focusIndex]
-      if (focusColumn === 0) toggleSource(source.id)
-      else pinSource(source)
+      if (focusColumn === 0 && sourceSelectionEnabled(source)) toggleSource(source.id)
+      else if (focusColumn === 1) pinSource(source)
     } else if (focusSection === "profiles" && mixProfiles.length > 0) {
       var profile = mixProfiles[focusIndex]
       profile.quickStartEnabled ? quickStartMixProfile(profile) : openMixProfile(profile)
@@ -3064,6 +3085,7 @@ Item {
     required property var sourceData
     required property int rowIndex
     readonly property bool checked: root.sourceSelected(sourceData.id)
+    readonly property bool selectionEnabled: root.sourceSelectionEnabled(sourceData)
     hasCursor: root.cursorActive && root.focusSection === "sources" && root.focusIndex === rowIndex
     current: checked
     foreground: root.foreground
@@ -3106,6 +3128,7 @@ Item {
             + (sourceData.pinned ? " · pinned" : "")
             + (sourceData.recent && !sourceData.active ? " · recently used" : "")
             + (root.recentCaptureIds.indexOf(String(sourceData.id)) >= 0 || sourceData.recentChoice ? " · confirmation required" : "")
+            + (!row.selectionEnabled ? " · disabled by Desktop (All)" : "")
             + " • " + (sourceData.detail || sourceData.name || "")
           color: root.dim
           font.family: root.fontFamily
@@ -3117,6 +3140,7 @@ Item {
 
       ToggleSwitch {
         checked: row.checked
+        enabled: row.selectionEnabled
         hasCursor: row.hasCursor && root.focusColumn === 0
         foreground: root.foreground
         onToggled: root.toggleSource(sourceData.id)

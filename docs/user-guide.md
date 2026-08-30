@@ -45,7 +45,7 @@ On first run:
 2. If a personal pre-public configuration is detected, complete [legacy migration](#legacy-migration) before starting a new Session.
 3. Choose and verify a Connection, then give its Receiver a recognizable local name.
 4. For a Tailscale or Direct SSH Connection, plan and approve the correct platform's Companion Setup to obtain a receiver-only Managed Identity.
-5. Select current audio Sources. Capture Sources are microphones or other direct inputs and require explicit selection. Pin important Sources that should stay visible while inactive.
+5. Select current audio Sources. Capture Sources are microphones or other direct inputs and require explicit selection. **Desktop (All)** replaces every other Source selection; deselect it before choosing individual applications or inputs. Pin important Sources that should stay visible while inactive.
 6. Optionally run the bounded Receiver test.
 7. Choose where to play selected audio—This PC, Receiver, or Both—and select **Start**.
 8. Confirm the persistent bar indicator appears for the entire active Session.
