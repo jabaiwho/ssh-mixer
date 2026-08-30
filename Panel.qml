@@ -6,6 +6,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
+import "PanelScroll.js" as PanelScroll
 
 Item {
   id: root
@@ -82,6 +83,7 @@ Item {
   property int focusIndex: 0
   property int focusColumn: 0
   property bool cursorActive: false
+  property string pendingSectionScroll: ""
 
   readonly property string fontFamily: Style.font.family
   readonly property color foreground: Color.popups.text
@@ -131,6 +133,7 @@ Item {
       next[section] = true
     }
     pinnedSections = next
+    if (next[section] === true) scheduleSectionScroll(section)
   }
 
   function activateSection(section) {
@@ -139,7 +142,7 @@ Item {
     focusIndex = 0
     focusColumn = 0
     cursorActive = true
-    scheduleFocusScroll()
+    scheduleSectionScroll(activeSection)
   }
 
   function visibleSourceChoices() {
@@ -162,6 +165,47 @@ Item {
     return count
   }
 
+  function sectionHeaderItem(section) {
+    if (section === "sources") return sourcesHeader
+    if (section === "session") return sessionHeader
+    if (section === "profiles") return profilesHeader
+    if (section === "receiver") return receiverHeader
+    if (section === "connection") return connectionHeader
+    if (section === "privacy") return privacyHeader
+    if (section === "diagnostics") return diagnosticsHeader
+    if (section === "removal") return removalHeader
+    return null
+  }
+
+  function sectionBodyItem(section) {
+    if (section === "sources") return sourcesContent
+    if (section === "session") return sessionContent
+    if (section === "profiles") return profilesContent
+    if (section === "receiver") return receiverContent
+    if (section === "connection") return connectionSetupBody
+    if (section === "privacy") return privacyBody
+    if (section === "diagnostics") return diagnosticsBody
+    if (section === "removal") return removalBody
+    return null
+  }
+
+  function ensureSectionVisible(section) {
+    if (!flick || !content) return
+    var header = sectionHeaderItem(section)
+    var body = sectionBodyItem(section)
+    if (!header || !body) return
+    var headerPoint = header.mapToItem(content, 0, 0)
+    var bodyPoint = body.mapToItem(content, 0, 0)
+    flick.contentY = PanelScroll.sectionTargetY(
+      flick.contentY,
+      flick.height,
+      flick.contentHeight,
+      headerPoint.y,
+      bodyPoint.y + body.height,
+      Style.space(8)
+    )
+  }
+
   function ensureVisible(item) {
     if (!item || !flick || !content) return
     var point = item.mapToItem(content, 0, 0)
@@ -169,7 +213,7 @@ Item {
     var bottom = top + item.height
     if (top < flick.contentY) flick.contentY = Math.max(0, top - Style.space(8))
     else if (bottom > flick.contentY + flick.height)
-      flick.contentY = Math.min(flick.contentHeight - flick.height, bottom - flick.height + Style.space(8))
+      flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height, bottom - flick.height + Style.space(8)))
   }
 
   function open(payloadJson) {
@@ -1205,6 +1249,11 @@ Item {
     focusScrollTimer.restart()
   }
 
+  function scheduleSectionScroll(section) {
+    pendingSectionScroll = String(section || "")
+    focusScrollTimer.restart()
+  }
+
   function moveCursor(dx, dy) {
     cursorActive = true
     var sections = sectionOrder()
@@ -1214,7 +1263,7 @@ Item {
       focusIndex = 0
       focusColumn = 0
       activeSection = focusSection
-      scheduleFocusScroll()
+      scheduleSectionScroll(focusSection)
       return
     }
     if (dx !== 0) {
@@ -1225,6 +1274,7 @@ Item {
       scheduleFocusScroll()
       return
     }
+    var sectionChanged = false
     if (dy > 0) {
       if (focusIndex < sectionLength(focusSection) - 1) {
         focusIndex++
@@ -1234,6 +1284,7 @@ Item {
         focusIndex = 0
         focusColumn = 0
         activeSection = focusSection
+        sectionChanged = true
       }
     } else if (dy < 0) {
       if (focusIndex > 0) {
@@ -1244,10 +1295,12 @@ Item {
         focusIndex = 0
         focusColumn = 0
         activeSection = focusSection
+        sectionChanged = true
       }
     }
     clampCursor()
-    scheduleFocusScroll()
+    if (sectionChanged) scheduleSectionScroll(focusSection)
+    else scheduleFocusScroll()
   }
 
   function tabSection(direction) {
@@ -1259,7 +1312,7 @@ Item {
     focusIndex = 0
     focusColumn = 0
     activeSection = focusSection
-    scheduleFocusScroll()
+    scheduleSectionScroll(focusSection)
   }
 
   function activateCursor() {
@@ -1286,9 +1339,15 @@ Item {
 
   Timer {
     id: focusScrollTimer
-    interval: 0
+    interval: 1
     repeat: false
-    onTriggered: root.ensureVisible(root.focusTarget())
+    onTriggered: {
+      if (root.pendingSectionScroll) {
+        var section = root.pendingSectionScroll
+        root.pendingSectionScroll = ""
+        root.ensureSectionVisible(section)
+      } else root.ensureVisible(root.focusTarget())
+    }
   }
 
   Timer {
@@ -1733,7 +1792,9 @@ Item {
               }
 
               Column {
-                width: parent.width
+                id: sourcesContent
+                x: Style.space(6)
+                width: parent.width - Style.space(12)
                 visible: root.sectionExpanded("sources")
                 spacing: Style.space(8)
 
@@ -1762,7 +1823,7 @@ Item {
                   SourceRow {
                     required property var modelData
                     required property int index
-                    width: content.width
+                    width: sourcesContent.width
                     sourceData: modelData
                     rowIndex: index
                   }
@@ -1795,7 +1856,7 @@ Item {
                 }
               }
 
-              PanelSeparator { visible: root.sectionExpanded("sources"); foreground: root.foreground; width: parent.width }
+              PanelSeparator { visible: false; foreground: root.foreground; width: parent.width }
 
               AccordionHeader {
                 id: sessionHeader
@@ -1804,7 +1865,9 @@ Item {
               }
 
               Column {
-                width: parent.width
+                id: sessionContent
+                x: Style.space(6)
+                width: parent.width - Style.space(12)
                 visible: root.sectionExpanded("session")
                 spacing: Style.space(8)
                 RowLayout {
@@ -1887,7 +1950,7 @@ Item {
                 }
               }
 
-              PanelSeparator { visible: root.sectionExpanded("session"); foreground: root.foreground; width: parent.width }
+              PanelSeparator { visible: false; foreground: root.foreground; width: parent.width }
 
               AccordionHeader {
                 id: profilesHeader
@@ -1896,7 +1959,9 @@ Item {
               }
 
               Column {
-                width: parent.width
+                id: profilesContent
+                x: Style.space(6)
+                width: parent.width - Style.space(12)
                 visible: root.sectionExpanded("profiles")
                 spacing: Style.space(8)
                 Text {
@@ -1949,7 +2014,7 @@ Item {
                 }
               }
 
-              PanelSeparator { visible: root.sectionExpanded("profiles"); foreground: root.foreground; width: parent.width }
+              PanelSeparator { visible: false; foreground: root.foreground; width: parent.width }
 
               Column {
                 width: parent.width
@@ -2026,7 +2091,9 @@ Item {
               }
 
               Column {
-                width: parent.width
+                id: receiverContent
+                x: Style.space(6)
+                width: parent.width - Style.space(12)
                 visible: root.sectionExpanded("receiver")
                 spacing: Style.space(8)
                 Text {
@@ -2052,7 +2119,7 @@ Item {
                   ReceiverButton {
                     required property var modelData
                     required property int index
-                    width: content.width
+                    width: receiverContent.width
                     receiverData: modelData
                     rowIndex: index
                   }
@@ -2618,7 +2685,7 @@ Item {
                 }
               }
 
-              PanelSeparator { visible: root.sectionExpanded("receiver"); foreground: root.foreground; width: parent.width }
+              PanelSeparator { visible: false; foreground: root.foreground; width: parent.width }
 
               Column {
                 id: connectionSetupSlot
@@ -2631,12 +2698,13 @@ Item {
                 }
                 Item {
                   id: connectionSetupBody
-                  width: parent.width
+                  x: Style.space(6)
+                  width: parent.width - Style.space(12)
                   height: connectionSetupContent.visible ? connectionSetupContent.implicitHeight : 0
                 }
               }
 
-              PanelSeparator { visible: root.sectionExpanded("connection"); foreground: root.foreground; width: parent.width }
+              PanelSeparator { visible: false; foreground: root.foreground; width: parent.width }
 
               Column {
                 id: privacySlot
@@ -2649,12 +2717,13 @@ Item {
                 }
                 Item {
                   id: privacyBody
-                  width: parent.width
+                  x: Style.space(6)
+                  width: parent.width - Style.space(12)
                   height: privacyContent.visible ? privacyContent.implicitHeight : 0
                 }
               }
 
-              PanelSeparator { visible: root.sectionExpanded("privacy"); foreground: root.foreground; width: parent.width }
+              PanelSeparator { visible: false; foreground: root.foreground; width: parent.width }
 
               Column {
                 id: diagnosticsSlot
@@ -2667,12 +2736,13 @@ Item {
                 }
                 Item {
                   id: diagnosticsBody
-                  width: parent.width
+                  x: Style.space(6)
+                  width: parent.width - Style.space(12)
                   height: diagnosticsContent.visible ? diagnosticsContent.implicitHeight : 0
                 }
               }
 
-              PanelSeparator { visible: root.sectionExpanded("diagnostics"); foreground: root.foreground; width: parent.width }
+              PanelSeparator { visible: false; foreground: root.foreground; width: parent.width }
 
               Column {
                 id: removalSlot
@@ -2685,7 +2755,8 @@ Item {
                 }
                 Item {
                   id: removalBody
-                  width: parent.width
+                  x: Style.space(6)
+                  width: parent.width - Style.space(12)
                   height: removalContent.visible ? removalContent.implicitHeight : 0
                 }
               }
@@ -2969,14 +3040,20 @@ Item {
     }
   }
 
-  component AccordionHeader: StableButton {
+  component AccordionHeader: Button {
     required property string sectionKey
     required property string label
+    readonly property bool expanded: root.sectionExpanded(sectionKey)
     width: content.width
-    text: (root.sectionExpanded(sectionKey) ? "▾  " : "▸  ") + label
-    foreground: root.foreground
+    text: (expanded ? "▾  " : "▸  ") + label
+    foreground: root.activeSection === sectionKey ? Color.accent : root.foreground
+    background: Util.alpha(root.foreground, expanded ? 0.10 : 0.035)
+    color: hot ? Style.hoverFillFor(foreground, accent) : background
+    borderSpec: Border.none()
     fontFamily: root.fontFamily
     fontSize: Style.font.title
+    horizontalPadding: Style.space(12)
+    verticalPadding: Style.space(10)
     leftAlign: true
     selected: root.activeSection === sectionKey
     onClicked: root.toggleSection(sectionKey)

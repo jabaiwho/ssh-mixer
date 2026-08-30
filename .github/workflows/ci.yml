@@ -33,6 +33,11 @@ jobs:
           /usr/lib/qt6/bin/qmlformat Indicator.qml >/dev/null
           /usr/lib/qt6/bin/qmlformat Lifecycle.qml >/dev/null
 
+      - name: Run headless QML behavior tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: /usr/lib/qt6/bin/qmltestrunner -input tests/qml -import .
+
       - name: Run application and security tests
         env:
           PYTHONDONTWRITEBYTECODE: "1"
