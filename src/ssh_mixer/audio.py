@@ -388,6 +388,12 @@ def resolve_source_matchers(
         if not candidates:
             missing.append(index)
             continue
+        if matcher["kind"] == "playback":
+            for candidate in candidates:
+                source_id = str(candidate.get("id", ""))
+                if source_id and source_id not in selected_ids:
+                    selected_ids.append(source_id)
+            continue
         if len(candidates) != 1:
             ambiguous.append({"matcherIndex": index, "candidateCount": len(candidates)})
             continue

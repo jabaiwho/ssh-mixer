@@ -24,7 +24,9 @@ from .connections import (
     TrustStore,
     connection_id,
     discover_tailscale_peers as default_discover_tailscale_peers,
+    find_connection,
     normalize_connection,
+    rename_connection,
     scan_host_keys as default_scan_host_keys,
     verify_tailscale_peer,
 )
@@ -47,6 +49,7 @@ from .openssh_profiles import (
     inspect_profile as default_inspect_profile,
     profile_connection,
 )
+from .source_choices import build_source_choices, resolve_choice_ids
 from .session import (
     SessionError,
     normalize_status,
@@ -79,6 +82,19 @@ ProfileInspector = Callable[[str], dict[str, Any]]
 BootstrapFactory = Callable[[dict[str, Any], str | None], LinuxBootstrap]
 WindowsBootstrapFactory = Callable[[dict[str, Any], str | None], WindowsBootstrap]
 MacOsBootstrapFactory = Callable[[dict[str, Any], str | None], MacOsBootstrap]
+
+
+def _source_resolution_requires_review(
+    matchers: list[dict[str, Any]], resolution: dict[str, Any]
+) -> bool:
+    for raw_index in resolution.get("missingMatchers", []):
+        try:
+            matcher = matchers[int(raw_index)]
+        except (IndexError, TypeError, ValueError):
+            return True
+        if matcher.get("kind") != "playback":
+            return True
+    return bool(resolution.get("ambiguousMatchers"))
 
 
 class MixerApplication:
@@ -179,7 +195,30 @@ class MixerApplication:
                     code="invalid-request",
                 )
             configured_payload = dict(payload)
-            if "sourceIds" in configured_payload:
+            if "sourceIds" in configured_payload and "sourceChoiceIds" in configured_payload:
+                return self._error(
+                    "provide sourceChoiceIds or sourceIds, not both",
+                    stage="application.configure",
+                    code="invalid-request",
+                )
+            if "sourceChoiceIds" in configured_payload:
+                choice_ids = configured_payload.get("sourceChoiceIds", [])
+                if not isinstance(choice_ids, list):
+                    return self._error(
+                        "sourceChoiceIds must be an array",
+                        stage="application.configure",
+                        code="invalid-request",
+                    )
+                choice_selection = resolve_choice_ids(
+                    self._discover_sources(),
+                    load_config().get("sourceMatchers", []),
+                    [str(item) for item in choice_ids],
+                )
+                configured_payload["sourceMatchers"] = choice_selection[
+                    "sourceMatchers"
+                ]
+                configured_payload["sourceIds"] = choice_selection["sourceIds"]
+            elif "sourceIds" in configured_payload:
                 source_ids = configured_payload.get("sourceIds", [])
                 if not isinstance(source_ids, list):
                     return self._error(
@@ -339,24 +378,41 @@ class MixerApplication:
                     code="invalid-request",
                 )
             source_ids = payload.get("sourceIds", [])
-            if not isinstance(source_ids, list):
+            choice_ids = payload.get("sourceChoiceIds", [])
+            if not isinstance(source_ids, list) or not isinstance(choice_ids, list):
                 return self._error(
-                    "Mix Profile sourceIds must be an array",
+                    "Mix Profile source IDs must be arrays",
+                    stage="mix-profile.save",
+                    code="invalid-request",
+                )
+            if "sourceIds" in payload and "sourceChoiceIds" in payload:
+                return self._error(
+                    "provide sourceChoiceIds or sourceIds, not both",
                     stage="mix-profile.save",
                     code="invalid-request",
                 )
             profile_value = dict(payload)
-            if "sourceIds" in payload:
+            if "sourceChoiceIds" in payload:
+                available_sources = self._discover_sources()
+                choice_selection = resolve_choice_ids(
+                    available_sources,
+                    load_config().get("sourceMatchers", []),
+                    [str(item) for item in choice_ids],
+                )
+                profile_value["sourceMatchers"] = choice_selection[
+                    "sourceMatchers"
+                ]
+            elif "sourceIds" in payload:
                 available_sources = self._discover_sources()
                 profile_value["sourceMatchers"] = matchers_for_source_ids(
                     available_sources, [str(item) for item in source_ids]
                 )
+            if "sourceChoiceIds" in payload or "sourceIds" in payload:
                 save_resolution = resolve_source_matchers(
                     available_sources, profile_value["sourceMatchers"]
                 )
-                if (
-                    save_resolution["missingMatchers"]
-                    or save_resolution["ambiguousMatchers"]
+                if _source_resolution_requires_review(
+                    profile_value["sourceMatchers"], save_resolution
                 ):
                     profile_value["quickStartEnabled"] = False
             profile = normalize_mix_profile(profile_value)
@@ -431,10 +487,15 @@ class MixerApplication:
                     reason="quick-start-disabled",
                     message="Quick Start is not enabled for this Mix Profile",
                 )
+            has_armed_playback = any(
+                matcher.get("kind") == "playback"
+                for matcher in profile["sourceMatchers"]
+            )
             if (
-                resolution["missingMatchers"]
-                or resolution["ambiguousMatchers"]
-                or not resolution["selectedIds"]
+                _source_resolution_requires_review(
+                    profile["sourceMatchers"], resolution
+                )
+                or (not resolution["selectedIds"] and not has_armed_playback)
             ):
                 return self._quick_start_blocked(
                     profile,
@@ -1063,6 +1124,72 @@ class MixerApplication:
                 "connection": connection,
                 "config": public_config(config),
             }
+        if operation == "connection.select":
+            payload = request.get("payload", {})
+            if not isinstance(payload, dict):
+                return self._error(
+                    "Connection selection payload must be an object",
+                    stage="connection.select",
+                    code="invalid-request",
+                )
+            if self._read_status().get("active"):
+                return self._error(
+                    "Stop the active Session before changing Receiver",
+                    stage="connection.select",
+                    code="session-active",
+                )
+            config = load_config()
+            connection = find_connection(
+                config.get("connections", []),
+                str(payload.get("connectionId", "")),
+            )
+            config["connection"] = connection
+            save_config(config)
+            return {
+                "ok": True,
+                "schemaVersion": 1,
+                "connectionId": connection_id(connection),
+                "connection": connection,
+                "config": public_config(config),
+            }
+        if operation == "connection.rename":
+            payload = request.get("payload", {})
+            if not isinstance(payload, dict):
+                return self._error(
+                    "Connection rename payload must be an object",
+                    stage="connection.rename",
+                    code="invalid-request",
+                )
+            config = load_config()
+            connections, renamed = rename_connection(
+                config.get("connections", []),
+                str(payload.get("connectionId", "")),
+                payload.get("receiverName", ""),
+            )
+            item_id = connection_id(renamed)
+            config["connections"] = connections
+            if isinstance(config.get("connection"), dict) and connection_id(
+                config["connection"]
+            ) == item_id:
+                config["connection"] = renamed
+            updated_profiles: list[dict[str, Any]] = []
+            for profile in config.get("mixProfiles", []):
+                updated = dict(profile)
+                saved_profile_connection = updated.get("connection")
+                if isinstance(saved_profile_connection, dict) and connection_id(
+                    saved_profile_connection
+                ) == item_id:
+                    updated["connection"] = renamed
+                updated_profiles.append(updated)
+            config["mixProfiles"] = updated_profiles
+            save_config(config)
+            return {
+                "ok": True,
+                "schemaVersion": 1,
+                "connectionId": item_id,
+                "connection": renamed,
+                "config": public_config(config),
+            }
         if operation == "connection.save":
             payload = request.get("payload", {})
             connection_value = payload.get("connection") if isinstance(payload, dict) else None
@@ -1458,6 +1585,9 @@ class MixerApplication:
             "ok": True,
             "schemaVersion": 1,
             "sources": sources,
+            "sourceChoices": build_source_choices(
+                sources, config.get("sourceMatchers", [])
+            ),
             "connectionOptions": {
                 "tailscaleRecommended": True,
                 "tailscalePeers": self._discover_tailscale_peers(),

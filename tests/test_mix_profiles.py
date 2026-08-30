@@ -161,7 +161,7 @@ class MixProfileApplicationTest(unittest.TestCase):
         self.assertEqual(result["recentCaptureIds"], ["source:alsa_input.usb-mic"])
         self.assertEqual(starts, [])
 
-    def test_missing_or_ambiguous_quick_start_source_opens_mixer(self) -> None:
+    def test_quick_start_arms_missing_playback_and_groups_multiple_streams(self) -> None:
         current_sources = list(SOURCES)
         starts: list[dict] = []
         with tempfile.TemporaryDirectory() as temp, self.environment(temp):
@@ -195,11 +195,14 @@ class MixProfileApplicationTest(unittest.TestCase):
                 }
             )
 
-        self.assertEqual(missing["reason"], "source-resolution-required")
-        self.assertEqual(ambiguous["reason"], "source-resolution-required")
-        self.assertTrue(missing["openMixer"])
-        self.assertTrue(ambiguous["openMixer"])
-        self.assertEqual(starts, [])
+        self.assertTrue(missing["ok"])
+        self.assertTrue(missing["started"])
+        self.assertTrue(ambiguous["ok"])
+        self.assertTrue(ambiguous["started"])
+        self.assertEqual(starts[0]["sourceIds"], [])
+        self.assertEqual(
+            starts[1]["sourceIds"], ["sink-input:101", "sink-input:999"]
+        )
 
     def test_quick_start_requires_an_explicit_confirmed_action(self) -> None:
         with tempfile.TemporaryDirectory() as temp, self.environment(temp):

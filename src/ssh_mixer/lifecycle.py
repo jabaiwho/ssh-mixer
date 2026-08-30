@@ -138,11 +138,13 @@ def indicator_status(
         isinstance(privacy, dict) and privacy.get("showReceiverLabel") is True
     )
     remote = configured.get("remote", {})
-    label = (
-        str(remote.get("host", "")).strip()
-        if active and show_label and isinstance(remote, dict)
-        else ""
-    )
+    connection = configured.get("connection")
+    label = ""
+    if active and show_label:
+        if isinstance(connection, dict):
+            label = str(connection.get("receiverName", "")).strip()
+        if not label and isinstance(remote, dict):
+            label = str(remote.get("host", "")).strip().split(".", 1)[0]
     if any(unicodedata.category(character).startswith("C") for character in label):
         label = ""
     return {

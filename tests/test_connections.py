@@ -19,6 +19,7 @@ from ssh_mixer.connections import (
     parse_tailscale_status,
     verify_tailscale_peer,
 )
+from ssh_mixer.config import config_from_payload, save_config
 from ssh_mixer.diagnostics import DiagnosticStore
 
 
@@ -99,6 +100,104 @@ class ConnectionTest(unittest.TestCase):
         for value in invalid:
             with self.subTest(value=value), self.assertRaises(ConnectionError):
                 normalize_connection(value)
+
+    def test_receiver_can_be_renamed_without_changing_connection_identity(self) -> None:
+        connection = normalize_connection(
+            {
+                "type": "direct",
+                "host": "receiver.example",
+                "user": "listener",
+                "receiverName": "Receiver",
+            }
+        )
+        original_id = connection_id(connection)
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(Path(temp) / "config"),
+                "XDG_DATA_HOME": str(Path(temp) / "data"),
+                "XDG_STATE_HOME": str(Path(temp) / "state"),
+                "XDG_RUNTIME_DIR": str(Path(temp) / "runtime"),
+            },
+            clear=False,
+        ):
+            save_config(config_from_payload({"connection": connection}))
+            app = MixerApplication(
+                discover_sources=lambda: [],
+                read_status=lambda: {"state": "stopped", "active": False},
+                discover_tailscale_peers=lambda: [],
+                discover_profiles=lambda: [],
+            )
+            renamed = app.execute(
+                {
+                    "operation": "connection.rename",
+                    "payload": {
+                        "connectionId": original_id,
+                        "receiverName": "Gaming PC",
+                    },
+                }
+            )
+            inspected = app.execute({"operation": "inspect"})
+
+        self.assertTrue(renamed["ok"])
+        self.assertEqual(renamed["connectionId"], original_id)
+        self.assertEqual(renamed["connection"]["receiverName"], "Gaming PC")
+        self.assertEqual(connection_id(renamed["connection"]), original_id)
+        self.assertEqual(inspected["config"]["schemaVersion"], 3)
+        self.assertEqual(len(inspected["config"]["connections"]), 1)
+        self.assertEqual(
+            inspected["config"]["connections"][0]["receiverName"], "Gaming PC"
+        )
+
+    def test_user_can_select_which_saved_connection_receives_the_next_session(self) -> None:
+        first = normalize_connection(
+            {
+                "type": "direct",
+                "host": "first.example",
+                "user": "listener",
+                "receiverName": "Office PC",
+            }
+        )
+        second = normalize_connection(
+            {
+                "type": "direct",
+                "host": "second.example",
+                "user": "listener",
+                "receiverName": "Gaming PC",
+            }
+        )
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(Path(temp) / "config"),
+                "XDG_DATA_HOME": str(Path(temp) / "data"),
+                "XDG_STATE_HOME": str(Path(temp) / "state"),
+                "XDG_RUNTIME_DIR": str(Path(temp) / "runtime"),
+            },
+            clear=False,
+        ):
+            save_config(
+                config_from_payload(
+                    {"connection": first, "connections": [first, second]}
+                )
+            )
+            app = MixerApplication(
+                discover_sources=lambda: [],
+                read_status=lambda: {"state": "stopped", "active": False},
+                discover_tailscale_peers=lambda: [],
+                discover_profiles=lambda: [],
+            )
+            selected = app.execute(
+                {
+                    "operation": "connection.select",
+                    "payload": {"connectionId": connection_id(second)},
+                }
+            )
+
+        self.assertTrue(selected["ok"])
+        self.assertEqual(selected["connection"]["receiverName"], "Gaming PC")
+        self.assertEqual(selected["config"]["remote"]["host"], "second.example")
+        self.assertEqual(len(selected["config"]["connections"]), 2)
 
     def test_application_approves_only_the_fingerprints_the_user_saw(self) -> None:
         connection = normalize_connection(

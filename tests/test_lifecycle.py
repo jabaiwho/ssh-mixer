@@ -138,7 +138,11 @@ class LifecyclePolicyTest(unittest.TestCase):
             clear=False,
         ), patch("ssh_mixer.session.signal.signal"), patch(
             "ssh_mixer.session.require_commands"
-        ), patch("ssh_mixer.session.discover_sources", return_value=[source]):
+        ), patch(
+            "ssh_mixer.session.discover_sources", return_value=[source]
+        ), patch(
+            "ssh_mixer.session.default_sink_name", return_value="output"
+        ):
             worker = ObservingWorker(
                 {
                     "sourceIds": ["sink-input:7"],
@@ -199,7 +203,11 @@ class LifecyclePolicyTest(unittest.TestCase):
             clear=False,
         ), patch("ssh_mixer.session.signal.signal"), patch(
             "ssh_mixer.session.require_commands"
-        ), patch("ssh_mixer.session.discover_sources", return_value=[source]):
+        ), patch(
+            "ssh_mixer.session.discover_sources", return_value=[source]
+        ), patch(
+            "ssh_mixer.session.default_sink_name", return_value="output"
+        ):
             worker = FailingWorker(
                 {
                     "sourceIds": ["sink-input:7"],
@@ -335,7 +343,11 @@ class LifecyclePolicyTest(unittest.TestCase):
             ACTIVE_PLAYBACK,
             {
                 "privacy": {"showReceiverLabel": True},
-                "remote": {"host": "chosen-label.example"},
+                "connection": {
+                    "receiverName": "Gaming PC",
+                    "host": "gaming-pc.tailnet-name.ts.net",
+                },
+                "remote": {"host": "gaming-pc.tailnet-name.ts.net"},
             },
         )
 
@@ -344,7 +356,8 @@ class LifecyclePolicyTest(unittest.TestCase):
         self.assertEqual(hidden["kind"], "recording")
         self.assertEqual(hidden["receiverLabel"], "")
         self.assertEqual(shown["kind"], "playback")
-        self.assertEqual(shown["receiverLabel"], "chosen-label.example")
+        self.assertEqual(shown["receiverLabel"], "Gaming PC")
+        self.assertNotIn("ts.net", shown["receiverLabel"])
 
     def test_inactive_indicator_never_reveals_receiver_label(self) -> None:
         result = indicator_status(

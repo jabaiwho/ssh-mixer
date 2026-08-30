@@ -100,16 +100,180 @@ class SourceMatcherTest(unittest.TestCase):
         self.assertEqual(result["selectedIds"], [])
         self.assertEqual(result["missingMatchers"], [0])
 
-    def test_ambiguity_and_missing_metadata_leave_matcher_unselected(self) -> None:
-        duplicate = dict(SOURCES[0], id="sink-input:999", pulseId="999")
+    def test_multiple_playback_streams_resolve_while_device_ambiguity_fails_closed(self) -> None:
+        duplicate_playback = dict(SOURCES[0], id="sink-input:999", pulseId="999")
+        duplicate_monitor = dict(
+            SOURCES[2], id="source:duplicate-monitor", pulseId="998"
+        )
         result = resolve_source_matchers(
-            SOURCES + [duplicate],
-            [matcher_for_source(SOURCES[0]), {"kind": "monitor", "name": "missing.monitor"}],
+            SOURCES + [duplicate_playback, duplicate_monitor],
+            [
+                matcher_for_source(SOURCES[0]),
+                matcher_for_source(SOURCES[2]),
+                {"kind": "monitor", "name": "missing.monitor"},
+            ],
         )
 
-        self.assertEqual(result["selectedIds"], [])
-        self.assertEqual(result["ambiguousMatchers"][0]["candidateCount"], 2)
-        self.assertEqual(result["missingMatchers"], [1])
+        self.assertEqual(result["selectedIds"], ["sink-input:101", "sink-input:999"])
+        self.assertEqual(
+            result["ambiguousMatchers"],
+            [{"matcherIndex": 1, "candidateCount": 2}],
+        )
+        self.assertEqual(result["missingMatchers"], [2])
+
+    def test_saved_playback_source_remains_selectable_while_inactive(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(Path(temp) / "config"),
+                "XDG_DATA_HOME": str(Path(temp) / "data"),
+                "XDG_STATE_HOME": str(Path(temp) / "state"),
+                "XDG_RUNTIME_DIR": str(Path(temp) / "runtime"),
+            },
+            clear=False,
+        ):
+            app = MixerApplication(discover_sources=lambda: [])
+            saved = app.execute(
+                {
+                    "operation": "configure",
+                    "payload": {
+                        "sourceMatchers": [
+                            {
+                                "kind": "playback",
+                                "processBinary": "chromium",
+                                "applicationName": "Chromium",
+                            }
+                        ]
+                    },
+                }
+            )
+            inspected = app.execute({"operation": "inspect"})
+
+        self.assertTrue(saved["ok"])
+        self.assertEqual(
+            inspected["sourceChoices"],
+            [
+                {
+                    "id": "source-choice:6154cc8582fac0f0",
+                    "type": "playback",
+                    "categoryLabel": "Playback Source",
+                    "label": "Chromium",
+                    "detail": "Ready when audio starts",
+                    "active": False,
+                    "activeStreamCount": 0,
+                    "selected": True,
+                    "recentChoice": False,
+                    "sensitiveCapture": False,
+                }
+            ],
+        )
+
+    def test_one_playback_choice_groups_every_active_stream_for_an_application(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(Path(temp) / "config"),
+                "XDG_DATA_HOME": str(Path(temp) / "data"),
+                "XDG_STATE_HOME": str(Path(temp) / "state"),
+                "XDG_RUNTIME_DIR": str(Path(temp) / "runtime"),
+            },
+            clear=False,
+        ):
+            second_stream = dict(
+                SOURCES[0], id="sink-input:202", pulseId="202", mediaName="Notification"
+            )
+            app = MixerApplication(discover_sources=lambda: [SOURCES[0], second_stream])
+            inspected = app.execute({"operation": "inspect"})
+
+        self.assertEqual(
+            inspected["sourceChoices"],
+            [
+                {
+                    "id": "source-choice:7d6c98a6b1755289",
+                    "type": "playback",
+                    "categoryLabel": "Playback Source",
+                    "label": "Example Player",
+                    "detail": "2 active streams",
+                    "active": True,
+                    "activeStreamCount": 2,
+                    "selected": False,
+                    "recentChoice": False,
+                    "sensitiveCapture": False,
+                }
+            ],
+        )
+
+    def test_logical_choice_selection_persists_only_stable_matchers(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(Path(temp) / "config"),
+                "XDG_DATA_HOME": str(Path(temp) / "data"),
+                "XDG_STATE_HOME": str(Path(temp) / "state"),
+                "XDG_RUNTIME_DIR": str(Path(temp) / "runtime"),
+            },
+            clear=False,
+        ):
+            app = MixerApplication(discover_sources=lambda: SOURCES)
+            initial = app.execute({"operation": "inspect"})
+            player = next(
+                choice
+                for choice in initial["sourceChoices"]
+                if choice["label"] == "Example Player"
+            )
+            saved = app.execute(
+                {
+                    "operation": "configure",
+                    "payload": {"sourceChoiceIds": [player["id"]]},
+                }
+            )
+            persisted = config_path().read_text(encoding="utf-8")
+            inspected = app.execute({"operation": "inspect"})
+
+        self.assertTrue(saved["ok"])
+        self.assertNotIn("sink-input:101", persisted)
+        self.assertNotIn('"pulseId"', persisted)
+        self.assertIn('"processBinary": "example-player"', persisted)
+        selected_player = next(
+            choice
+            for choice in inspected["sourceChoices"]
+            if choice["label"] == "Example Player"
+        )
+        self.assertTrue(selected_player["selected"])
+
+    def test_logical_capture_choice_is_explicit_for_one_start_but_not_persisted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(Path(temp) / "config"),
+                "XDG_DATA_HOME": str(Path(temp) / "data"),
+                "XDG_STATE_HOME": str(Path(temp) / "state"),
+                "XDG_RUNTIME_DIR": str(Path(temp) / "runtime"),
+            },
+            clear=False,
+        ):
+            app = MixerApplication(discover_sources=lambda: SOURCES)
+            initial = app.execute({"operation": "inspect"})
+            microphone = next(
+                choice
+                for choice in initial["sourceChoices"]
+                if choice["type"] == "capture"
+            )
+            configured = app.execute(
+                {
+                    "operation": "configure",
+                    "payload": {"sourceChoiceIds": [microphone["id"]]},
+                }
+            )
+            persisted = config_path().read_text(encoding="utf-8")
+
+        self.assertTrue(configured["ok"])
+        self.assertEqual(
+            configured["config"]["sourceIds"],
+            ["source:alsa_input.usb-mic"],
+        )
+        self.assertNotIn("source:alsa_input.usb-mic", persisted)
+        self.assertIn('"kind": "capture"', persisted)
 
     def test_numeric_ids_are_not_persisted_when_configuration_is_saved(self) -> None:
         with tempfile.TemporaryDirectory() as temp, patch.dict(

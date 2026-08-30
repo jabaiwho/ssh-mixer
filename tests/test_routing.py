@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from ssh_mixer.routing import build_route_plan
+from ssh_mixer.routing import build_playback_reconciliation, build_route_plan
 
 SOURCES = [
     {
@@ -71,6 +71,65 @@ class RoutePlanTest(unittest.TestCase):
         self.assertFalse(plan["streamRemote"])
         self.assertEqual(plan["operations"], [])
         self.assertIn("does not monitor microphones", " ".join(plan["warnings"]))
+
+    def test_reconciliation_routes_only_new_streams_for_armed_playback_sources(self) -> None:
+        chromium = {
+            "id": "sink-input:201",
+            "type": "playback",
+            "pulseId": "201",
+            "processBinary": "chromium",
+            "applicationName": "Chromium",
+            "name": "Chromium",
+            "label": "Chromium",
+            "sinkName": "alsa_output.headset",
+            "sinkLabel": "Headset",
+        }
+        spotify = {
+            "id": "sink-input:202",
+            "type": "playback",
+            "pulseId": "202",
+            "processBinary": "spotify",
+            "applicationName": "Spotify",
+            "name": "Spotify",
+            "label": "Spotify",
+            "sinkName": "alsa_output.headset",
+            "sinkLabel": "Headset",
+        }
+
+        operations = build_playback_reconciliation(
+            [chromium, spotify],
+            [
+                {
+                    "kind": "playback",
+                    "processBinary": "chromium",
+                    "applicationName": "Chromium",
+                }
+            ],
+            destination="both",
+            routed_sink_input_ids=set(),
+            local_copy_sinks=set(),
+        )
+
+        self.assertEqual(
+            operations,
+            [
+                {
+                    "op": "load-loopback",
+                    "role": "preserve-local-playback",
+                    "source": "ssh_mixer_mix.monitor",
+                    "sink": "alsa_output.headset",
+                    "label": "Local copy for Headset",
+                },
+                {
+                    "op": "move-sink-input",
+                    "sourceId": "sink-input:201",
+                    "sinkInputId": "201",
+                    "fromSink": "alsa_output.headset",
+                    "toSink": "ssh_mixer_mix",
+                    "label": "Chromium",
+                },
+            ],
+        )
 
     def test_monitor_sources_warn_that_local_playback_is_passive(self) -> None:
         plan = build_route_plan(SOURCES, ["source:monitor"], "ssh")

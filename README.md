@@ -47,17 +47,21 @@ ssh-mixer mix-profile-save --json '{"name":"Desk","connection":{"type":"direct",
 ssh-mixer mix-profile-quick-start --json '{"profileId":"profile-…","quickStartConfirmed":true}'
 ```
 
+## Receivers and Connections
+
+The panel keeps a bounded collection of verified Connections. Choose the Receiver for the next Session from the Mixer view and give each one an editable local Receiver name such as **Gaming PC**. Renaming changes presentation only; Connection identity, host trust, and Managed Identity remain unchanged. Full addresses appear only in Receiver details.
+
 ## Sources, Source Matchers, and Mix Profiles
 
 The mixer labels **Playback Sources**, **Capture Sources**, and **Output Monitors** separately. Concrete `sink-input` and PulseAudio/PipeWire numeric IDs exist only while discovering and starting the current Session; SSH-mixer never writes them to configuration. Saved choices use stable metadata Source Matchers instead.
 
-A Source Matcher restores a Playback Source or Output Monitor only when exactly one current source matches all saved stable fields. Missing, changed, or ambiguous metadata leaves the source unselected. Capture Source matchers are retained only as recent choices: microphones are never automatically reselected.
+A selected Playback Source is one logical application choice. It remains visible and armed while inactive, may represent several current streams, and attaches matching streams that appear during the Session. SSH-mixer preserves the normal local default output so unselected applications stay local. Output Monitors still require one unambiguous device match. Capture Source matchers are retained only as recent choices: microphones are never automatically reselected.
 
-A Mix Profile retains its Connection, Route Mode, Source Matchers, lock/privacy policy, bitrate, and connection timeout. Saving a playback-only profile can enable **Quick Start**, but selecting Quick Start remains an explicit action and starts only after every source resolves uniquely. Profiles containing Capture Sources disable Quick Start and open the mixer for fresh source selection and confirmation. Missing or ambiguous sources also open the mixer without starting a Session.
+A Mix Profile retains its Connection, Route Mode, Source Matchers, lock/privacy policy, bitrate, and connection timeout. Saving a playback-only profile can enable **Quick Start**; an inactive Playback Source starts armed and attaches later. Profiles containing Capture Sources disable Quick Start and open the mixer for fresh source selection and confirmation. Missing or ambiguous device Sources also open the mixer without starting a Session.
 
 ## Privacy lifecycle and persistent indication
 
-While any Session is active, SSH-mixer's non-hideable active-state widget remains in the Omarchy bar and opens Session controls. Playback uses an audio-stream symbol; a Session with a selected Capture Source uses a distinct urgent microphone/recording symbol. Receiver host labels are absent by default and appear only after enabling **Show Receiver label** in the Privacy Lifecycle section. There is no setting that hides an active indicator.
+While any Session is active, SSH-mixer's non-hideable active-state widget remains in the Omarchy bar and opens Session controls. Playback uses an audio-stream symbol; a Session with a selected Capture Source uses a distinct urgent microphone/recording symbol. Receiver names are absent by default and appear only after enabling **Show Receiver label** in Settings. The bar never uses a full Connection address such as a Tailscale DNS name. There is no setting that hides an active indicator.
 
 Screen lock defaults to **Stop all on lock**. The explicit **Continue playback on lock** alternative applies only to Sessions without Capture Sources. Every Capture Session stops and cleans up on lock, and unlock never resumes it. The keep-loaded lifecycle service also stops Sessions before suspend/shutdown and as a login session closes. Receiver disconnect or fatal network loss ends the foreground pipeline and runs the same ownership-safe cleanup. Wake, unlock, login, network reconnection, source discovery, panel open, and profile load never start a Session.
 

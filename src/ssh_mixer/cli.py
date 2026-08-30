@@ -7,11 +7,11 @@ import sys
 from typing import Any
 
 from .application import MixerApplication
-from .audio import discover_sources, resolve_source_ids, resolve_source_matchers
+from .audio import discover_sources, resolve_source_ids
 from .config import config_from_payload, load_config, logs_dir, public_config, save_config
 from .diagnostics import DiagnosticStore
 from .lifecycle import run_lifecycle_monitor
-from .routing import RoutingError, build_route_plan
+from .routing import RoutingError, build_route_plan, resolve_session_source_ids
 from .session import (
     SessionError,
     SessionWorker,
@@ -78,12 +78,23 @@ def plan_command(args: argparse.Namespace) -> int:
     config = config_from_payload(payload)
     sources = payload.get("availableSources") if isinstance(payload.get("availableSources"), list) else discover_sources()
     source_ids = resolve_source_ids(sources, config.get("sourceIds", []))
-    if not source_ids:
-        resolution = resolve_source_matchers(sources, config.get("sourceMatchers", []))
-        if resolution["missingMatchers"] or resolution["ambiguousMatchers"]:
-            raise RoutingError("saved Source Matchers require review in the mixer")
-        source_ids = resolution["selectedIds"]
-    plan = build_route_plan(sources, source_ids, config.get("destination", "both"))
+    source_matchers = config.get("sourceMatchers", [])
+    if source_ids and not source_matchers:
+        plan = build_route_plan(
+            sources, source_ids, config.get("destination", "both")
+        )
+    else:
+        resolution = resolve_session_source_ids(
+            sources,
+            source_matchers,
+            source_ids,
+        )
+        plan = build_route_plan(
+            sources,
+            resolution["sourceIds"],
+            config.get("destination", "both"),
+            armed_playback=bool(resolution["armedPlayback"]),
+        )
     emit({"ok": True, "plan": plan, "config": public_config(config)})
     return 0
 
@@ -100,7 +111,16 @@ def test_connection_command(args: argparse.Namespace) -> int:
 
 def start_command(args: argparse.Namespace) -> int:
     payload = read_payload(args)
-    config = config_from_payload(payload)
+    configured_base: dict[str, Any] | None = None
+    if "sourceChoiceIds" in payload:
+        configured = MixerApplication().execute(
+            {"operation": "configure", "payload": payload}
+        )
+        if not configured.get("ok"):
+            emit(configured)
+            return 1
+        configured_base = configured.get("config")
+    config = config_from_payload(payload, base=configured_base)
     status = start_session(config)
     emit({"ok": True, "status": status, "config": public_config(config)})
     return 0
@@ -466,6 +486,24 @@ def build_parser() -> argparse.ArgumentParser:
     connection_save.set_defaults(
         func=application_payload_command,
         application_operation="connection.save",
+    )
+
+    connection_select = sub.add_parser(
+        "connection-select", help="Select the saved Connection for the next Session"
+    )
+    add_json_args(connection_select)
+    connection_select.set_defaults(
+        func=application_payload_command,
+        application_operation="connection.select",
+    )
+
+    connection_rename = sub.add_parser(
+        "connection-rename", help="Rename a saved Receiver without changing trust identity"
+    )
+    add_json_args(connection_rename)
+    connection_rename.set_defaults(
+        func=application_payload_command,
+        application_operation="connection.rename",
     )
 
     trust_inspect = sub.add_parser(

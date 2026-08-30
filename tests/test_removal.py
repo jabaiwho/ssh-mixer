@@ -392,7 +392,7 @@ class RemovalApplicationTest(unittest.TestCase):
             )
 
         self.assertEqual(len(planned_receivers), 1)
-        self.assertEqual(planned_receivers[0]["label"], "listener@receiver.example")
+        self.assertEqual(planned_receivers[0]["label"], "receiver")
         self.assertFalse(pending["ok"])
         self.assertEqual(plugin_calls, [["omarchy-plugin-remove", "jabaiwho.ssh-mixer", "--yes"]])
         self.assertEqual(state_absent_before_plugin, [True])

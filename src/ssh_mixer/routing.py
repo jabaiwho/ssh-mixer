@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .audio import match_source, normalize_source_matcher
+
 VALID_DESTINATIONS = {"local", "ssh", "both"}
 DEFAULT_MIX_SINK = "ssh_mixer_mix"
 
@@ -14,11 +16,137 @@ def _source_by_id(sources: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return {str(source.get("id")): source for source in sources if source.get("id")}
 
 
+def resolve_session_source_ids(
+    sources: list[dict[str, Any]],
+    source_matchers: list[dict[str, Any]],
+    explicit_source_ids: list[str],
+) -> dict[str, Any]:
+    """Resolve armed Sources for Session start without requiring playback now."""
+
+    matchers = [normalize_source_matcher(value) for value in source_matchers]
+    by_id = _source_by_id(sources)
+    selected_ids: list[str] = []
+    for source_id in explicit_source_ids:
+        source = by_id.get(str(source_id))
+        if source is None:
+            raise RoutingError(f"source not available: {source_id}")
+        if not any(match_source(source, matcher) for matcher in matchers):
+            raise RoutingError("a selected source changed identity before Session start")
+        if str(source_id) not in selected_ids:
+            selected_ids.append(str(source_id))
+
+    armed_playback = False
+    for matcher in matchers:
+        candidates = [source for source in sources if match_source(source, matcher)]
+        if matcher["kind"] == "playback":
+            armed_playback = True
+            for source in candidates:
+                source_id = str(source.get("id", ""))
+                if source_id and source_id not in selected_ids:
+                    selected_ids.append(source_id)
+            continue
+        if matcher["kind"] == "capture":
+            # Capture Matchers are recent choices only. They require a concrete,
+            # explicit selection for every Session.
+            continue
+        if not candidates:
+            raise RoutingError("saved Output Monitor is not currently available")
+        if len(candidates) != 1:
+            raise RoutingError("saved Output Monitor is ambiguous; review the mixer")
+        source_id = str(candidates[0].get("id", ""))
+        if source_id and source_id not in selected_ids:
+            selected_ids.append(source_id)
+
+    return {"sourceIds": selected_ids, "armedPlayback": armed_playback}
+
+
+def build_playback_reconciliation(
+    sources: list[dict[str, Any]],
+    source_matchers: list[dict[str, Any]],
+    *,
+    destination: str,
+    routed_sink_input_ids: set[str],
+    local_copy_sinks: set[str],
+    mix_sink: str = DEFAULT_MIX_SINK,
+) -> list[dict[str, Any]]:
+    """Plan idempotent routing for newly appearing armed Playback Sources."""
+
+    destination = str(destination).lower()
+    if destination not in VALID_DESTINATIONS:
+        raise RoutingError(f"invalid destination: {destination}")
+    if destination == "local":
+        return []
+
+    playback_matchers = [
+        matcher
+        for matcher in (
+            normalize_source_matcher(value) for value in source_matchers
+        )
+        if matcher["kind"] == "playback"
+    ]
+    matching: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for source in sources:
+        if source.get("type") != "playback":
+            continue
+        sink_input_id = str(source.get("pulseId", ""))
+        if (
+            not sink_input_id
+            or sink_input_id in routed_sink_input_ids
+            or sink_input_id in seen_ids
+            or not any(match_source(source, matcher) for matcher in playback_matchers)
+        ):
+            continue
+        seen_ids.add(sink_input_id)
+        matching.append(source)
+
+    operations: list[dict[str, Any]] = []
+    if destination == "both":
+        planned_sinks: set[str] = set()
+        for source in matching:
+            original_sink = str(source.get("sinkName", ""))
+            if (
+                not original_sink
+                or original_sink == mix_sink
+                or original_sink in local_copy_sinks
+                or original_sink in planned_sinks
+            ):
+                continue
+            planned_sinks.add(original_sink)
+            operations.append(
+                {
+                    "op": "load-loopback",
+                    "role": "preserve-local-playback",
+                    "source": f"{mix_sink}.monitor",
+                    "sink": original_sink,
+                    "label": f"Local copy for {source.get('sinkLabel') or original_sink}",
+                }
+            )
+
+    for source in matching:
+        original_sink = str(source.get("sinkName", ""))
+        if original_sink == mix_sink:
+            continue
+        operations.append(
+            {
+                "op": "move-sink-input",
+                "sourceId": source["id"],
+                "sinkInputId": str(source["pulseId"]),
+                "fromSink": original_sink,
+                "toSink": mix_sink,
+                "label": source.get("label", source["id"]),
+            }
+        )
+    return operations
+
+
 def build_route_plan(
     sources: list[dict[str, Any]],
     source_ids: list[str],
     destination: str,
     mix_sink: str = DEFAULT_MIX_SINK,
+    *,
+    armed_playback: bool = False,
 ) -> dict[str, Any]:
     """Build the routing plan exercised by both tests and the live session.
 
@@ -63,7 +191,7 @@ def build_route_plan(
             "warnings": warnings,
         }
 
-    if not selected:
+    if not selected and not armed_playback:
         raise RoutingError("select at least one input for SSH or Both mode")
 
     operations.append({"op": "load-null-sink", "sink": mix_sink})

@@ -61,7 +61,7 @@ Protected application paths reject symbolic links at security-sensitive seams an
 
 The backend can inspect the user's PipeWire/PulseAudio graph and read audio from explicitly selected Playback Sources, Capture Sources, or Output Monitors. A selected Capture Source can contain microphone audio. Audio is passed through process pipes to FFmpeg/OpenSSH and is not written to configuration or diagnostics.
 
-During a Session, SSH-mixer can create a temporary null sink and loopback modules and move selected playback streams. Cleanup verifies ownership before unloading modules, moving streams back, or terminating tracked processes. This does not stop another process running as the same desktop user from accessing audio independently.
+During a Session, SSH-mixer can create a temporary null sink and loopback modules and move streams matching explicitly armed Playback Sources. It immediately preserves the prior normal local default sink, reconciles newly appearing application streams against stable Source Matchers, and leaves unselected applications local. Selecting **Desktop (All)** is the explicit path for all normal output. Cleanup verifies ownership before unloading modules, moving streams back, or terminating tracked processes, and does not overwrite a newer output choice made by the user. This does not stop another process running as the same desktop user from accessing audio independently.
 
 ### Persistence
 
@@ -114,7 +114,7 @@ On all platforms, a Managed Identity forced command permits only Receiver Protoc
 
 Screen lock defaults to stopping every Session. The optional continue-on-lock policy applies only to non-Capture playback. Capture always stops, repeated lock observation enforces the stop, and unlock/wake/login/reconnection never resumes or starts audio.
 
-Suspend, shutdown, logout, Receiver disconnect, fatal pipeline failure, loss of lock observation, or loss of the required lifecycle/indicator heartbeat stop active routing and invoke ownership-safe cleanup. Start fails closed if privacy services are unavailable. Receiver labels are hidden by default, but the active indicator itself cannot be hidden.
+Suspend, shutdown, logout, Receiver disconnect, fatal pipeline failure, loss of lock observation, or loss of the required lifecycle/indicator heartbeat stop active routing and invoke ownership-safe cleanup. Start fails closed if privacy services are unavailable. Receiver names are hidden by default, full Connection addresses are never used as normal bar labels, and the active indicator itself cannot be hidden.
 
 The quiet test starts at `-40 dBFS`, lasts 0.5 seconds, fades, and never changes system volume. A user must confirm audibility and explicitly request each 4 dB increase; `-24 dBFS` is the maximum.
 

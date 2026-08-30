@@ -147,12 +147,12 @@ The first release includes Windows and Linux support plus an Experimental macOS 
 18. Dependency installation uses approved system package managers, shows package/source/elevation details, requires approval, and verifies results. Download-and-pipe installation is prohibited.
 19. Receiver and Companion versions negotiate a separate Receiver Protocol version so compatible releases can remain installed.
 20. Update checks may identify newer compatible immutable releases. Installation requires change review and approval, signature/checksum verification, post-update verification, and rollback.
-21. Audio discovery distinguishes Playback Sources, Capture Sources, and Output Monitors. Persistent configuration stores Source Matchers rather than temporary numeric identifiers.
+21. Audio discovery distinguishes logical Playback Sources, Capture Sources, and Output Monitors. An armed Playback Source may have zero or several current streams and attaches only matching streams that appear during a Session. Persistent configuration stores Source Matchers rather than temporary numeric identifiers.
 22. Source Matcher resolution succeeds only on a unique stable match. Ambiguity and mismatch leave the source unselected. Capture Sources are never automatically restored.
-23. Mix Profiles store a Connection, Route Mode, Source Matchers, privacy policy, and quality settings. Playback-only profiles support explicit Quick Start; Capture Sources force confirmation.
+23. Mix Profiles store a Connection, Route Mode, Source Matchers, privacy policy, and quality settings. Playback-only profiles support explicit Quick Start even while an armed Playback Source is inactive; Capture Sources force confirmation.
 24. No Mix Profile or Session starts on panel open, login, wake, network reconnection, or application discovery.
 25. The Session lifecycle is serialized and fail-closed. Screen lock stops all by default; the only alternative continues non-microphone audio. Capture never resumes automatically. Suspend, logout, disconnect, and fatal network loss stop and clean up.
-26. A persistent, non-disableable indicator represents every active Session. Capture is visually distinct. Receiver labels are hidden on the bar by default but may be enabled.
+26. A persistent, non-disableable indicator represents every active Session. Capture is visually distinct. Receiver names are hidden on the bar by default but may be enabled; full Connection addresses are never normal bar labels.
 27. Resource tracking records ownership evidence, process start identity, and Session identity. Cleanup never signals or unloads a resource whose identity cannot be proven.
 28. Protected application directories use least-permission modes; atomic writes reject unsafe links and preserve permissions. Detached workers receive protected input rather than serialized configuration in process arguments.
 29. Logs are structured, bounded, redacted, and contain no audio. Default retention is seven days or twenty Sessions, whichever removes data first. Verbose mode expires after one Session.
