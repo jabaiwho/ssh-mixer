@@ -60,7 +60,9 @@ ffplay_available=false
 [ -x "$ffplay_path" ] && ffplay_available=true
 
 if [ "$operation" = capabilities ]; then
-  printf '{"schemaVersion":1,"protocol":"v1","protocolVersion":%s,"helperVersion":"%s","platform":"macos","experimental":true,"realDeviceVerified":false,"architecture":"%s","runtimeElevated":false,"ffplay":%s,"operations":["capabilities","diagnostics","play","quiet-test","remove"],"quietTest":{"startDbfs":-40,"defaultDbfs":-32,"maximumDbfs":0,"stepDb":1,"durationSeconds":0.5}}\n' "$PROTOCOL_VERSION" "$HELPER_VERSION" "$architecture" "$ffplay_available"
+  printf '{"schemaVersion":1,"protocol":"v1","protocolVersion":%s,"helperVersion":"%s","platform":"macos","experimental":true,"realDeviceVerified":false,"architecture":"%s","runtimeElevated":false,"ffplay":%s,"operations":["capabilities","diagnostics","play","quiet-test","remove"],"quietTest":{"startDbfs":%s,"defaultDbfs":%s,"maximumDbfs":%s,"stepDb":%s,"durationSeconds":0.5}}\n' \
+    "$PROTOCOL_VERSION" "$HELPER_VERSION" "$architecture" "$ffplay_available" \
+    "$QUIET_START_DBFS" "$QUIET_DEFAULT_DBFS" "$QUIET_MAXIMUM_DBFS" "$QUIET_STEP_DB"
   exit 0
 fi
 
