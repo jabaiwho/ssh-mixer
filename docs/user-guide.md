@@ -35,6 +35,8 @@ omarchy-shell shell summon jabaiwho.ssh-mixer '{}'
 
 Opening the panel, discovering sources, loading a Mix Profile, waking, unlocking, logging in, or reconnecting never starts audio. Start is always explicit.
 
+The panel uses larger tinted, borderless accordion headers to distinguish navigation sections from the thin outlined controls inside them. `j`/`k` moves vertically and opens the next section at its first option; the panel scrolls that header toward the top so the body is visible. `h`/`l` moves among horizontal options. A section opened with the mouse remains open until clicked again, so several sections may be pinned open together.
+
 Owners may create and operate modified source under the MIT license. The official safety policy is not an anti-modification boundary; downstream builds and owner-authorized agents follow the owner's chosen policy and use distinct release trust. See [Custom builds and forks](custom-builds.md).
 
 On first run:

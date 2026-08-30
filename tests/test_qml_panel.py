@@ -36,16 +36,28 @@ class PanelRuntimeSafetyTest(unittest.TestCase):
         self.assertIn('proc.command = [backend, "connection-rename"', PANEL)
         self.assertIn('placeholderText: "Receiver name"', PANEL)
 
-    def test_keyboard_navigation_scrolls_central_focus_and_keeps_horizontal_motion_local(self) -> None:
+    def test_keyboard_navigation_scrolls_sections_and_keeps_horizontal_motion_local(self) -> None:
         self.assertIn("function focusTarget()", PANEL)
         self.assertIn("function scheduleFocusScroll()", PANEL)
-        self.assertIn("onTriggered: root.ensureVisible(root.focusTarget())", PANEL)
+        self.assertIn("function scheduleSectionScroll(section)", PANEL)
+        self.assertIn("function ensureSectionVisible(section)", PANEL)
+        self.assertIn("PanelScroll.sectionTargetY(", PANEL)
+        self.assertIn("root.ensureSectionVisible(section)", PANEL)
         self.assertIn("focusColumn + dx", PANEL)
         self.assertNotIn("else switchView(dx)", PANEL)
 
     def test_every_stable_click_target_has_an_idle_border(self) -> None:
         stable = PANEL.split("component StableButton: Button", 1)[1]
         self.assertIn("bordered: true", stable)
+
+    def test_section_headers_are_tinted_borderless_bands_not_option_boxes(self) -> None:
+        accordion = PANEL.split("component AccordionHeader: Button", 1)[1].split(
+            "component SourceRow", 1
+        )[0]
+        self.assertIn("borderSpec: Border.none()", accordion)
+        self.assertIn("expanded ? 0.10 : 0.035", accordion)
+        self.assertIn("fontSize: Style.font.title", accordion)
+        self.assertIn("width: parent.width - Style.space(12)", PANEL)
 
     def test_active_bar_indicator_is_fixed_visible_and_opens_controls(self) -> None:
         self.assertIn("mx-streaming", INDICATOR)
