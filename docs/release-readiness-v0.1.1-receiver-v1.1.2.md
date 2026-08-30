@@ -44,7 +44,7 @@ Tracked in [issue #22](https://github.com/jabaiwho/ssh-mixer/issues/22).
 - [ ] Confirm selected-application late attachment and unselected-application isolation.
 - [ ] Confirm Selected, Pinned, and Recently Used behavior, including Clear recent and no Capture history.
 - [ ] Confirm keyboard section transitions, whole-section scrolling, mouse-pinned sections, outlined options, and fixed clickable `mx-streaming`/`mx-capture` indicators.
-- [ ] Confirm physical-default preservation and bounded process/module counts through repeated Start, refresh, and Stop cycles.
+- [ ] Confirm physical-default preservation and bounded process/module counts through repeated Input selection, refresh, automatic selection changes, final deselection, and End Stream cycles.
 - [ ] Record silence-triggered refresh after minute 15 and one uninterrupted or accelerated hard-deadline refresh at minute 30, including bounded gap and steady process count.
 - [ ] Confirm stopped cleanup leaves no SSH-mixer modules or transport processes.
 

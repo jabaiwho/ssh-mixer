@@ -1111,7 +1111,7 @@ def require_migration_complete() -> None:
 
     if MigrationService(status_reader=lambda: {"active": False}).inspect()["detected"]:
         raise SessionError(
-            "legacy configuration requires an explicit migration choice before Start"
+            "legacy configuration requires an explicit migration choice before starting a Session"
         )
 
 
@@ -1121,7 +1121,7 @@ def require_no_pending_removal() -> None:
         raise SessionError("pending Receiver cleanup state is unsafe; Start is blocked")
     if pending.is_file():
         raise SessionError(
-            "Receiver cleanup is pending; retry or explicitly abandon it before Start"
+            "Receiver cleanup is pending; retry or explicitly abandon it before starting a Session"
         )
 
 
@@ -1133,7 +1133,7 @@ def require_lifecycle_monitor() -> None:
 
     if not privacy_services_ready():
         raise SessionError(
-            "privacy lifecycle service is unavailable; refresh the Omarchy shell before Start"
+            "privacy lifecycle service is unavailable; refresh the Omarchy shell before starting a Session"
         )
 
 

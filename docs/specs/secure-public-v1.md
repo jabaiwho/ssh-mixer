@@ -66,14 +66,14 @@ The first release includes Windows and Linux support plus an Experimental macOS 
 52. As a user, I want playback-only Mix Profiles available through Quick Start, so that an explicit menu selection can begin streaming immediately.
 53. As a user, I want microphone-containing Mix Profiles to require confirmation, so that Quick Start cannot silently activate capture.
 54. As a user, I want missing or ambiguous Quick Start sources to open the mixer instead of starting, so that errors remain visible and correctable.
-55. As a user, I want merely opening SSH-mixer never to start a Session, so that viewing settings has no transmission side effect.
-56. As a user, I want Sessions to start only through an explicit action, so that streaming is always intentional.
-57. As a user, I want closing the panel to leave a deliberately started Session active, so that background playback is supported.
+55. As a user, I want opening SSH-mixer never to start and closing it never to stop a Session, so that viewing settings has no transmission side effect while background playback remains supported.
+56. As a user, I want direct Playback Source selection to start immediately and the final deselection or End Stream to cleanly stop, so that selection and activation cannot drift apart.
+57. As a user, I want every Capture start or restart to require an additional confirmation, so that selection-driven playback cannot weaken microphone consent.
 58. As a user, I want an unavoidable persistent indicator while a Session is active, so that streaming cannot become invisible.
 59. As a user, I want microphone Sessions marked with a distinct recording indicator, so that sensitive capture is immediately recognizable.
 60. As a user, I want the compact indicator to protect receiver-name privacy by default, so that my infrastructure is not permanently exposed on the bar.
 61. As a user, I want every active bar indicator to use fixed mx-streaming or mx-capture text and open controls when clicked, so that Session state stays visible without exposing Receiver identity.
-62. As a user, I want the indicator to open Session controls, so that stopping is immediately accessible.
+62. As a user, I want the indicator to open always-visible Inputs with Route Mode and End Stream controls, so that routing and stopping are immediately accessible.
 63. As a user, I want screen lock to stop all streaming by default, so that unattended capture and playback transmission end.
 64. As a user, I want a clear setting to continue non-microphone audio while locked, so that deliberate playback use remains possible.
 65. As a user, I want Capture Sources always stopped on lock, so that microphones cannot continue while I am away.

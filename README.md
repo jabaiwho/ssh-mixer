@@ -57,17 +57,17 @@ The panel keeps a bounded collection of verified Connections. Choose the Receive
 
 The mixer labels **Playback Sources**, **Capture Sources**, and **Output Monitors** separately. Concrete `sink-input` and PulseAudio/PipeWire numeric IDs exist only while discovering and starting the current Session; SSH-mixer never writes them to configuration. Saved choices use stable metadata Source Matchers instead.
 
-A selected Playback Source is one logical application choice. It remains visible and armed while inactive, may represent several current streams, and attaches matching streams that appear during the Session. Pinning is independent: it keeps an app or input visible without selecting or routing it. A protected, clearable local list retains at most 20 recently observed Playback Source Matchers so useful apps can be pinned later; it never auto-selects audio or includes microphones. SSH-mixer preserves the normal local default output so unselected applications stay local. Output Monitors still require one unambiguous device match. Capture Source matchers are retained only as explicit recent choices: microphones are never automatically reselected.
+A selected Playback Source is one logical application choice. Directly selecting it in the always-visible **1. Inputs** section starts routing immediately; changing a non-empty selection applies it through one bounded stop/start transition, while turning off the final Input or choosing **End Stream** stops and cleans up. It remains visible and armed while inactive, may represent several current streams, and attaches matching streams that appear during the Session. Pinning is independent: it keeps an app or input visible without selecting, starting, or routing it. Capture needs an additional confirmation before each start or restart. Number keys `1` through `7` jump to the corresponding panel section. A protected, clearable local list retains at most 20 recently observed Playback Source Matchers so useful apps can be pinned later; it never auto-selects audio or includes microphones. SSH-mixer preserves the normal local default output so unselected applications stay local. Output Monitors still require one unambiguous device match. Capture Source matchers are retained only as explicit recent choices: microphones are never automatically reselected.
 
 A Mix Profile retains its Connection, Route Mode, Source Matchers, lock/privacy policy, bitrate, and connection timeout. Saving a playback-only profile can enable **Quick Start**; an inactive Playback Source starts armed and attaches later. Profiles containing Capture Sources disable Quick Start and open the mixer for fresh source selection and confirmation. Missing or ambiguous device Sources also open the mixer without starting a Session.
 
 ## Privacy lifecycle and persistent indication
 
-While any Session is active, SSH-mixer's non-hideable active-state widget remains in the Omarchy bar and opens Session controls when clicked. Playback reads **mx-streaming** beside an audio-stream symbol; a Session with a selected Capture Source reads **mx-capture** beside a distinct urgent microphone/recording symbol. The bar never uses a Receiver nickname or full Connection address, and there is no setting that hides an active indicator.
+While any Session is active, SSH-mixer's non-hideable active-state widget remains in the Omarchy bar and opens the always-visible Inputs and End Stream controls when clicked. Playback reads **mx-streaming** beside an audio-stream symbol; a Session with a selected Capture Source reads **mx-capture** beside a distinct urgent microphone/recording symbol. The bar never uses a Receiver nickname or full Connection address, and there is no setting that hides an active indicator.
 
 Screen lock defaults to **Stop all on lock**. The explicit **Continue playback on lock** alternative applies only to Sessions without Capture Sources. Every Capture Session stops and cleans up on lock, and unlock never resumes it. The keep-loaded lifecycle service also stops Sessions before suspend/shutdown and as a login session closes. Receiver disconnect or fatal network loss ends the foreground pipeline and runs the same ownership-safe cleanup. Wake, unlock, login, network reconnection, source discovery, panel open, and profile load never start a Session.
 
-Closing the panel does not stop a deliberately started Session; use the persistent bar indicator to reopen controls and Stop. Start fails closed unless fresh protected heartbeats prove both the bar indicator and keep-loaded lifecycle monitor are running; loss of lock observation also stops an active Session rather than silently dropping the privacy boundary. The lifecycle monitor invokes only fixed backend event operations. It does not install hooks, modify Omarchy lock settings, or start anything.
+Closing the panel does not stop a deliberately started Session; use the persistent bar indicator to reopen controls and choose **End Stream**. Input-driven start fails closed unless fresh protected heartbeats prove both the bar indicator and keep-loaded lifecycle monitor are running; loss of lock observation also stops an active Session rather than silently dropping the privacy boundary. The lifecycle monitor invokes only fixed backend event operations. It does not install hooks, modify Omarchy lock settings, or start anything.
 
 ## Guided legacy migration
 
@@ -179,7 +179,7 @@ The source stream keeps 10 ms Opus frames and flushes each frame as an Ogg page.
 
 ## Troubleshooting
 
-- Run `ssh-mixer test-connection` if Start fails before audio changes.
+- Run `ssh-mixer test-connection` if selecting an Input fails before audio changes.
 - Run `ssh-mixer stop` to restore moved playback streams and unload temporary PipeWire/PulseAudio modules.
 - Run `pactl list short sinks` and `pactl list short modules` to check for leftover `ssh_mixer_mix` resources.
 - Start application playback before refreshing if the stream is not listed yet.

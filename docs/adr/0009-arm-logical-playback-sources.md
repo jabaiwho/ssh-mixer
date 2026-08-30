@@ -4,7 +4,7 @@ PipeWire application streams exist only while an application owns an audio strea
 
 Three independent states prevent convenience from becoming routing consent:
 
-- **Selected** arms a Source for the next explicitly started Session.
+- **Selected** grants routing consent; a direct Playback Source selection starts the Session immediately under ADR 0010.
 - **Pinned** keeps a Source visible whether active, selected, or inactive.
 - **Recently used** is a protected local presentation catalog of at most 20 observed Playback Source Matchers. It never includes microphones, never selects audio, and can be cleared.
 
