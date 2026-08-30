@@ -359,6 +359,25 @@ class LifecyclePolicyTest(unittest.TestCase):
         self.assertEqual(shown["receiverLabel"], "Gaming PC")
         self.assertNotIn("ts.net", shown["receiverLabel"])
 
+    def test_indicator_uses_short_fallback_when_no_receiver_name_exists(self) -> None:
+        dns = indicator_status(
+            ACTIVE_PLAYBACK,
+            {
+                "privacy": {"showReceiverLabel": True},
+                "remote": {"host": "gaming-pc.tailnet-name.ts.net"},
+            },
+        )
+        address = indicator_status(
+            ACTIVE_PLAYBACK,
+            {
+                "privacy": {"showReceiverLabel": True},
+                "remote": {"host": "100.72.18.44"},
+            },
+        )
+
+        self.assertEqual(dns["receiverLabel"], "gaming-pc")
+        self.assertEqual(address["receiverLabel"], "Receiver 18.44")
+
     def test_inactive_indicator_never_reveals_receiver_label(self) -> None:
         result = indicator_status(
             {"state": "stopped", "active": False},

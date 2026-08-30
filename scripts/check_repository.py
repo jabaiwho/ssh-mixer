@@ -183,7 +183,13 @@ def check_windows_receiver(errors: list[str]) -> None:
     ):
         if required not in setup_text:
             errors.append(f"receiver/windows/setup-v1.ps1: missing security control: {required}")
-    for required in ("Assert-NonElevated", "$QuietStartDbfs = -40", "$QuietMaximumDbfs = -24"):
+    for required in (
+        "Assert-NonElevated",
+        "$QuietStartDbfs = -40",
+        "$QuietDefaultDbfs = -32",
+        "$QuietMaximumDbfs = 0",
+        "$QuietStepDb = 1",
+    ):
         if required not in receiver_text:
             errors.append(
                 f"receiver/windows/ssh-mixer-receiver-v1.ps1: missing security control: {required}"
@@ -216,7 +222,9 @@ def check_macos_receiver(errors: list[str]) -> None:
         '"experimental":true',
         '"realDeviceVerified":false',
         "QUIET_START_DBFS=-40",
-        "QUIET_MAXIMUM_DBFS=-24",
+        "QUIET_DEFAULT_DBFS=-32",
+        "QUIET_MAXIMUM_DBFS=0",
+        "QUIET_STEP_DB=1",
     ):
         if required not in receiver_text:
             errors.append(
@@ -246,12 +254,12 @@ def check_update_versions(errors: list[str]) -> None:
     if plugin_match is not None and f'"pluginVersion": "{plugin_match.group(1)}"' not in builder_text:
         errors.append("release metadata builder plugin version is not synchronized")
     expected_markers = {
-        "receiver/linux/setup-v1.sh": 'COMPANION_VERSION="1.1.1"',
-        "receiver/linux/ssh-mixer-receiver-v1.py": 'HELPER_VERSION = "1.1.1"',
-        "receiver/windows/setup-v1.ps1": "$CompanionVersion = '1.1.1'",
-        "receiver/windows/ssh-mixer-receiver-v1.ps1": "$HelperVersion = '1.1.1'",
-        "receiver/macos/setup-v1.sh": "COMPANION_VERSION=1.1.1",
-        "receiver/macos/ssh-mixer-receiver-v1": "HELPER_VERSION=1.1.1",
+        "receiver/linux/setup-v1.sh": 'COMPANION_VERSION="1.1.2"',
+        "receiver/linux/ssh-mixer-receiver-v1.py": 'HELPER_VERSION = "1.1.2"',
+        "receiver/windows/setup-v1.ps1": "$CompanionVersion = '1.1.2'",
+        "receiver/windows/ssh-mixer-receiver-v1.ps1": "$HelperVersion = '1.1.2'",
+        "receiver/macos/setup-v1.sh": "COMPANION_VERSION=1.1.2",
+        "receiver/macos/ssh-mixer-receiver-v1": "HELPER_VERSION=1.1.2",
     }
     for relative, marker in expected_markers.items():
         if marker not in (ROOT / relative).read_text(encoding="utf-8"):
@@ -426,7 +434,7 @@ def check_public_documentation(errors: list[str]) -> None:
             "Direct SSH Connection",
             "OpenSSH Profile Connection",
             "Review host trust",
-            "Quiet test",
+            "Receiver test",
             "Session privacy and lock behavior",
             "Diagnostics and normal failure reports",
             "Contribute a fix",

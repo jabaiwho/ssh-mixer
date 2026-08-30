@@ -5,6 +5,7 @@ import selectors
 import signal
 import subprocess
 import time
+import ipaddress
 import unicodedata
 from collections.abc import Callable
 from pathlib import Path
@@ -125,6 +126,19 @@ def handle_lifecycle_event(
     }
 
 
+def _short_receiver_host(host: str) -> str:
+    value = host.strip().rstrip(".")
+    if not value:
+        return ""
+    try:
+        address = ipaddress.ip_address(value.strip("[]"))
+    except ValueError:
+        return value.split(".", 1)[0]
+    if isinstance(address, ipaddress.IPv4Address):
+        return "Receiver " + ".".join(str(address).split(".")[-2:])
+    return "Receiver " + ":".join(address.exploded.split(":")[:2]) + "…"
+
+
 def indicator_status(
     status: dict[str, Any] | None = None,
     config: dict[str, Any] | None = None,
@@ -144,7 +158,7 @@ def indicator_status(
         if isinstance(connection, dict):
             label = str(connection.get("receiverName", "")).strip()
         if not label and isinstance(remote, dict):
-            label = str(remote.get("host", "")).strip().split(".", 1)[0]
+            label = _short_receiver_host(str(remote.get("host", "")))
     if any(unicodedata.category(character).startswith("C") for character in label):
         label = ""
     return {

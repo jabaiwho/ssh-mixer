@@ -51,7 +51,7 @@ Unless XDG variables override the parent directories, SSH-mixer owns:
 | `~/.config/ssh-mixer/` | `0600` configuration and a temporary protected legacy-migration backup |
 | `~/.local/share/ssh-mixer/keys/` | one `0700` directory and `0600` private Managed Identity per Receiver |
 | `~/.local/share/ssh-mixer/trust/` | approved host-key Trust Records and generated `known_hosts` material |
-| `~/.local/state/ssh-mixer/` | bounded redacted diagnostics, Session state, and protected Pending Cleanup state |
+| `~/.local/state/ssh-mixer/` | bounded redacted diagnostics, Session state, protected Pending Cleanup state, and at most 20 recent Playback Source Matchers |
 | `$XDG_RUNTIME_DIR/ssh-mixer/` | locks, worker handoff, and lifecycle/indicator heartbeats; state-directory fallback when no runtime directory is available |
 | a private temporary update directory | bounded downloaded artifacts; verified cleanup is required after an update attempt |
 
@@ -116,7 +116,9 @@ Screen lock defaults to stopping every Session. The optional continue-on-lock po
 
 Suspend, shutdown, logout, Receiver disconnect, fatal pipeline failure, loss of lock observation, or loss of the required lifecycle/indicator heartbeat stop active routing and invoke ownership-safe cleanup. Start fails closed if privacy services are unavailable. Receiver names are hidden by default, full Connection addresses are never used as normal bar labels, and the active indicator itself cannot be hidden.
 
-The quiet test starts at `-40 dBFS`, lasts 0.5 seconds, fades, and never changes system volume. A user must confirm audibility and explicitly request each 4 dB increase; `-24 dBFS` is the maximum.
+The Receiver test lasts 0.5 seconds, fades, and never changes system volume. Its silent slider defaults to `-32 dBFS` and permits whole-dB choices from `-40` through full-scale `0 dBFS`; only a separate explicit Play action transmits the tone, and the UI warns that high levels may be loud.
+
+SSH-mixer stores at most 20 stable Playback Source Matchers in a protected local recently-used catalog. It never stores audio, temporary PipeWire/PulseAudio IDs, or microphones in this catalog. History never selects or routes a Source, can be cleared explicitly, and suppresses currently active applications until they disappear so an immediate refresh does not recreate cleared entries. Pinning is a separate explicit preference that keeps a Source visible without selecting it.
 
 ## Diagnostics and reporting
 

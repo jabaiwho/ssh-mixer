@@ -143,7 +143,7 @@ class ConnectionTest(unittest.TestCase):
         self.assertEqual(renamed["connectionId"], original_id)
         self.assertEqual(renamed["connection"]["receiverName"], "Gaming PC")
         self.assertEqual(connection_id(renamed["connection"]), original_id)
-        self.assertEqual(inspected["config"]["schemaVersion"], 3)
+        self.assertEqual(inspected["config"]["schemaVersion"], 4)
         self.assertEqual(len(inspected["config"]["connections"]), 1)
         self.assertEqual(
             inspected["config"]["connections"][0]["receiverName"], "Gaming PC"

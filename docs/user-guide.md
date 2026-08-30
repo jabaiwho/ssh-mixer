@@ -43,9 +43,9 @@ On first run:
 2. If a personal pre-public configuration is detected, complete [legacy migration](#legacy-migration) before starting a new Session.
 3. Choose and verify a Connection, then give its Receiver a recognizable local name.
 4. For a Tailscale or Direct SSH Connection, plan and approve the correct platform's Companion Setup to obtain a receiver-only Managed Identity.
-5. Select current audio Sources. Capture Sources are microphones or other direct inputs and require explicit selection.
-6. Optionally run the bounded quiet test.
-7. Choose Local, SSH, or Both Route Mode and select **Start**.
+5. Select current audio Sources. Capture Sources are microphones or other direct inputs and require explicit selection. Pin important Sources that should stay visible while inactive.
+6. Optionally run the bounded Receiver test.
+7. Choose where to play selected audio—This PC, Receiver, or Both—and select **Start**.
 8. Confirm the persistent bar indicator appears for the entire active Session.
 
 ## Choose a Connection
@@ -86,15 +86,15 @@ Bootstrap Authentication is one-time native OpenSSH authentication. Passwords, k
 
 Review platform-specific permissions in [the security model](security-model.md#receiver-side-changes).
 
-## Select Sources and Route Mode
+## Select, pin, and route Sources
 
 - **Playback Source:** one logical application choice, such as Chromium or Spotify.
 - **Capture Source:** a microphone or other direct audio input.
 - **Output Monitor:** a passive tap of audio already playing through an output. The primary monitor is **Desktop (All)**.
 
-Numeric PipeWire/PulseAudio IDs are runtime-only. An explicitly selected Playback Source persists through its stable Source Matcher, remains visible while inactive, and may match several current application streams. During a Session, newly appearing matching streams attach automatically while unselected applications remain on the normal local output. Output Monitors still require an unambiguous device match. Capture matchers are recent-choice hints only and never reselect a microphone.
+Numeric PipeWire/PulseAudio IDs are runtime-only. **Selected** controls what may route in the next Session; **Pinned** controls what remains visible and never selects or routes audio by itself. SSH-mixer keeps a protected, bounded local list of the 20 most recently observed Playback Sources so a user can reopen **Recently used**, pin a useful app, or clear the list. Recent history never auto-selects an app and never includes microphones. An explicitly selected Playback Source persists through its stable Source Matcher, remains visible while inactive, and may match several current application streams. During a Session, newly appearing matching streams attach automatically while unselected applications remain on the normal local output. Output Monitors still require an unambiguous device match. Capture matchers are recent-choice hints only and never reselect a microphone.
 
-Route Modes:
+**Play audio on** choices:
 
 - **Local:** no remote stream and no SSH-mixer route change.
 - **SSH:** selected playback is moved to the temporary mix and is not preserved locally for that Session. An Output Monitor cannot suppress the output it observes.
@@ -104,17 +104,9 @@ Capture is never looped into local speakers by SSH-mixer. Changing Source select
 
 For SSH and Both, one explicitly started Session may contain multiple bounded Stream Epochs. After 15 minutes, SSH-mixer waits for at least one second below -50 dBFS and then recreates only FFmpeg, SSH, and Receiver playback. It performs the same refresh at 30 minutes even without silence. Source selection, routing, active indication, and lifecycle consent remain in place, while remote output may have a brief gap. The sequential replacement runs without a terminal, display, notification, focus change, or overlapping playback pipeline. Process creation and the SSH handshake have a brief unavoidable resource cost. Silence detection runs inside the existing encoder rather than as another process; it adds a small continuous scan cost rather than a second background pipeline. Failure to create the replacement stops visibly instead of retrying or falling back silently.
 
-## Quiet test
+## Receiver test
 
-The quiet test is optional and never changes system volume:
-
-1. The first play is exactly `-40 dBFS`, 0.5 seconds, once, with fades.
-2. Confirm whether it was audible.
-3. Only an audible confirmation enables a separate **Increase by 4 dB** action.
-4. Replay deliberately at the new level.
-5. Never exceed the fixed `-24 dBFS` cap.
-
-Technical playback success is not treated as proof that the user heard sound.
+The Receiver test is optional and never changes system volume. Its slider defaults to `-32 dBFS` and selects whole-dB levels from `-40` through `0 dBFS`; moving the slider is silent. Only **Play Receiver test** sends one 0.5-second faded tone. `0 dBFS` is full-scale and may be loud, so raise the level deliberately. Technical playback success is not treated as proof that the user heard sound.
 
 ## Session privacy and lock behavior
 

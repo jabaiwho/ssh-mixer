@@ -344,6 +344,23 @@ def build_parser() -> argparse.ArgumentParser:
         application_operation="mix-profile.quick-start",
     )
 
+    source_pin = sub.add_parser(
+        "source-pin", help="Keep one logical Source visible without selecting it"
+    )
+    add_json_args(source_pin)
+    source_pin.set_defaults(
+        func=application_payload_command,
+        application_operation="source.pin",
+    )
+
+    source_history_clear = sub.add_parser(
+        "source-history-clear", help="Clear the bounded recent Playback Source list"
+    )
+    source_history_clear.set_defaults(
+        func=application_payload_command,
+        application_operation="source-history.clear",
+    )
+
     indicator_status = sub.add_parser("indicator-status", help=argparse.SUPPRESS)
     indicator_status.set_defaults(
         func=application_payload_command,

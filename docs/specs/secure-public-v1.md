@@ -52,16 +52,16 @@ The first release includes Windows and Linux support plus an Experimental macOS 
 38. As a user, I want missing dependencies verified after installation, so that setup does not advance on an unusable receiver.
 39. As a user, I want a gentle receiver test sound, so that testing does not unexpectedly blast headphones or speakers.
 40. As a user, I want the test to begin near -40 dBFS with fades and short duration, so that the first test is deliberately quiet.
-41. As a user, I want optional small increases with a hard -24 dBFS cap, so that I can hear the test without an unrestricted loudness control.
-42. As a user, I want SSH-mixer never to change receiver system volume, so that setup does not alter my established listening level.
-43. As a user, I want to confirm whether I heard the test, so that silent playback failures become structured diagnostics.
+41. As a user, I want a silent test-level slider from -40 through 0 dBFS in whole-dB steps, defaulting to -32 dBFS, so that I control the one-shot Receiver test deliberately.
+42. As a user, I want SSH-mixer never to change receiver system volume or play merely because the slider moved, so that setup does not alter my established listening level.
+43. As a user, I want full-scale and other high test levels visibly warned, so that I understand they may be loud before explicitly choosing Play.
 44. As a user, I want Playback Sources, Capture Sources, and Output Monitors clearly distinguished, so that I understand what may be transmitted.
 45. As a user, I want temporary PipeWire and PulseAudio identifiers excluded from saved choices, so that identifier reuse cannot select another application.
 46. As a user, I want stable Source Matchers used for saved playback preferences, so that a uniquely matching application can be restored safely.
 47. As a user, I want ambiguous source matches left unselected, so that SSH-mixer fails closed rather than guessing.
 48. As a user, I want microphones excluded from automatic reselection, so that remembered settings do not silently prepare sensitive capture.
 49. As a user, I want recently used microphones offered without being selected, so that deliberate reuse remains convenient.
-50. As a user, I want no audio source selected by a public-install default, so that installation cannot inherit a developer-specific application choice.
+50. As a user, I want no audio source selected by a public-install default and Selected, Pinned, and Recently used kept separate, so that installation, pinning, and bounded clearable Playback Source history never grant routing consent.
 51. As a user, I want Mix Profiles for common routes, so that receiver, Route Mode, playback choices, privacy, and stream settings can be reused.
 52. As a user, I want playback-only Mix Profiles available through Quick Start, so that an explicit menu selection can begin streaming immediately.
 53. As a user, I want microphone-containing Mix Profiles to require confirmation, so that Quick Start cannot silently activate capture.
@@ -159,7 +159,7 @@ The first release includes Windows and Linux support plus an Experimental macOS 
 30. Structured operation errors and Diagnostic Reports apply to the entire product on every platform, not only Experimental adapters.
 31. Diagnostic Reports are generated and redacted locally, previewed in full, editable, and submitted through a prefilled browser GitHub issue. Logs are opt-in and no GitHub token is stored.
 32. Security reports use GitHub private vulnerability reporting. No telemetry, automatic uploads, or background failure reporting are permitted.
-33. Quiet testing uses a generated, faded, non-looping signal beginning near -40 dBFS. User-requested increases are bounded and never exceed -24 dBFS. Receiver system volume is never changed.
+33. Receiver testing uses a generated, faded, non-looping 0.5-second signal. A silent whole-dB slider defaults to -32 dBFS and is bounded from -40 through full-scale 0 dBFS; only a separate explicit Play action emits sound, high levels are warned, and Receiver system volume is never changed.
 34. Legacy configuration migration is guided and transactional. Import-and-secure, user-managed retention, and fresh setup are explicit choices. Migration waits for inactive Sessions and retains rollback until verification.
 35. Destination and plugin removal revoke remote keys and helpers before deleting local state. Offline cleanup remains pending until retried or explicitly abandoned. Companion Setup supports independent receiver cleanup.
 36. The public repository begins with clean reviewed history. The former repository remains private under an archive name, while the public canonical repository retains the expected SSH-mixer URL.

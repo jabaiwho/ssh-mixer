@@ -1,0 +1,20 @@
+{
+  "linux/companion": [
+    "Report Companion 1.1.2 for the selectable Receiver test-level release."
+  ],
+  "linux/receiver": [
+    "Let an explicitly chosen bounded Receiver test use any whole-dB level from -40 to 0 dBFS. The 0.5-second fade and no-system-volume-change guarantees remain unchanged."
+  ],
+  "windows/companion": [
+    "Report Companion 1.1.2 for the selectable Receiver test-level release."
+  ],
+  "windows/receiver": [
+    "Let an explicitly chosen bounded Receiver test use any whole-dB level from -40 to 0 dBFS. The 0.5-second fade and no-system-volume-change guarantees remain unchanged."
+  ],
+  "macos/companion": [
+    "Experimental: report Companion 1.1.2 for the selectable Receiver test-level release."
+  ],
+  "macos/receiver": [
+    "Experimental: let an explicitly chosen bounded Receiver test use any whole-dB level from -40 to 0 dBFS while retaining realDeviceVerified false."
+  ]
+}

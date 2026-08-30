@@ -107,9 +107,9 @@ class VersionRepresentationTest(unittest.TestCase):
     def test_plugin_companion_receiver_and_protocol_versions_are_independent(self) -> None:
         self.assertEqual(PLUGIN_VERSION, "0.1.1")
         self.assertEqual(PROTOCOL_VERSION, 1)
-        self.assertEqual(PINNED_RECEIVER_RELEASE, "1.1.1")
-        self.assertEqual(COMPANION_VERSIONS["linux"], "1.1.1")
-        self.assertEqual(RECEIVER_VERSIONS["windows"], "1.1.1")
+        self.assertEqual(PINNED_RECEIVER_RELEASE, "1.1.2")
+        self.assertEqual(COMPANION_VERSIONS["linux"], "1.1.2")
+        self.assertEqual(RECEIVER_VERSIONS["windows"], "1.1.2")
         self.assertNotEqual(PLUGIN_VERSION, RECEIVER_VERSIONS["macos"])
 
 

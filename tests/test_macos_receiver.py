@@ -162,20 +162,32 @@ class MacOsSetupTest(unittest.TestCase):
             parse_receiver_operation("ssh-mixer-receiver v1 capabilities")["operation"],
             "capabilities",
         )
-        quiet = parse_receiver_operation("ssh-mixer-receiver v1 quiet-test --dbfs -40")
-        self.assertEqual(quiet["dbfs"], -40)
+        quiet = parse_receiver_operation("ssh-mixer-receiver v1 quiet-test --dbfs -32")
+        self.assertEqual(quiet["dbfs"], -32)
+        self.assertEqual(
+            parse_receiver_operation("ssh-mixer-receiver v1 quiet-test --dbfs -1")["dbfs"],
+            -1,
+        )
+        self.assertEqual(
+            parse_receiver_operation("ssh-mixer-receiver v1 quiet-test --dbfs 0")["dbfs"],
+            0,
+        )
         for command in (
             "zsh -c whoami",
             "ssh-mixer-receiver v2 capabilities",
             "ssh-mixer-receiver v1 shell",
-            "ssh-mixer-receiver v1 quiet-test --dbfs -23",
+            "ssh-mixer-receiver v1 quiet-test --dbfs -41",
+            "ssh-mixer-receiver v1 quiet-test --dbfs 1",
+            "ssh-mixer-receiver v1 quiet-test --dbfs -32; whoami",
         ):
             with self.assertRaises(SetupError):
                 parse_receiver_operation(command)
 
         receiver = RECEIVER_PATH.read_text(encoding="utf-8")
         self.assertIn("QUIET_START_DBFS=-40", receiver)
-        self.assertIn("QUIET_MAXIMUM_DBFS=-24", receiver)
+        self.assertIn("QUIET_DEFAULT_DBFS=-32", receiver)
+        self.assertIn("QUIET_MAXIMUM_DBFS=0", receiver)
+        self.assertIn("QUIET_STEP_DB=1", receiver)
         self.assertIn("afade=t=in", receiver)
         self.assertIn("afade=t=out", receiver)
         self.assertIn('"experimental":true', receiver)

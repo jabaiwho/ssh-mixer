@@ -12,7 +12,7 @@ from .versions import COMPANION_VERSIONS, PROTOCOL_VERSION, RECEIVER_VERSIONS
 PUBLIC_KEY_RE = re.compile(r"^ssh-ed25519 ([A-Za-z0-9+/]+={0,3})(?:\s+.*)?$")
 SAFE_PATH_RE = re.compile(r"^/Users/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")
 VERSION_RE = re.compile(r"^(\d+)\.(\d+)(?:\.(\d+))?(?:[^0-9].*)?$")
-QUIET_LEVELS = {-40, -36, -32, -28, -24}
+QUIET_LEVELS = set(range(-40, 1))
 REQUIRED_RESTRICTIONS = {
     "restrict",
     "no-agent-forwarding",

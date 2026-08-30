@@ -2,10 +2,11 @@
 set -eu
 
 PROTOCOL_VERSION=1
-HELPER_VERSION=1.1.1
+HELPER_VERSION=1.1.2
 QUIET_START_DBFS=-40
-QUIET_MAXIMUM_DBFS=-24
-QUIET_STEP_DB=4
+QUIET_DEFAULT_DBFS=-32
+QUIET_MAXIMUM_DBFS=0
+QUIET_STEP_DB=1
 QUIET_DURATION_SECONDS=0.5
 QUIET_FADE_SECONDS=0.08
 
@@ -44,11 +45,14 @@ case "$command_text" in
   "ssh-mixer-receiver v1 diagnostics") operation=diagnostics ;;
   "ssh-mixer-receiver v1 play") operation=play ;;
   "ssh-mixer-receiver v1 remove") operation=remove ;;
-  "ssh-mixer-receiver v1 quiet-test --dbfs -40") operation=quiet-test; dbfs=-40 ;;
-  "ssh-mixer-receiver v1 quiet-test --dbfs -36") operation=quiet-test; dbfs=-36 ;;
-  "ssh-mixer-receiver v1 quiet-test --dbfs -32") operation=quiet-test; dbfs=-32 ;;
-  "ssh-mixer-receiver v1 quiet-test --dbfs -28") operation=quiet-test; dbfs=-28 ;;
-  "ssh-mixer-receiver v1 quiet-test --dbfs -24") operation=quiet-test; dbfs=-24 ;;
+  "ssh-mixer-receiver v1 quiet-test --dbfs "*)
+    operation=quiet-test
+    dbfs=${command_text#"ssh-mixer-receiver v1 quiet-test --dbfs "}
+    case "$dbfs" in
+      0|-[1-9]|-[12][0-9]|-3[0-9]|-40) ;;
+      *) protocol_error "Receiver test level must be an integer from -40 to 0 dBFS" ;;
+    esac
+    ;;
   *) protocol_error "operation is malformed or not allowed" ;;
 esac
 
@@ -56,7 +60,7 @@ ffplay_available=false
 [ -x "$ffplay_path" ] && ffplay_available=true
 
 if [ "$operation" = capabilities ]; then
-  printf '{"schemaVersion":1,"protocol":"v1","protocolVersion":%s,"helperVersion":"%s","platform":"macos","experimental":true,"realDeviceVerified":false,"architecture":"%s","runtimeElevated":false,"ffplay":%s,"operations":["capabilities","diagnostics","play","quiet-test","remove"],"quietTest":{"startDbfs":-40,"maximumDbfs":-24,"stepDb":4,"durationSeconds":0.5}}\n' "$PROTOCOL_VERSION" "$HELPER_VERSION" "$architecture" "$ffplay_available"
+  printf '{"schemaVersion":1,"protocol":"v1","protocolVersion":%s,"helperVersion":"%s","platform":"macos","experimental":true,"realDeviceVerified":false,"architecture":"%s","runtimeElevated":false,"ffplay":%s,"operations":["capabilities","diagnostics","play","quiet-test","remove"],"quietTest":{"startDbfs":-40,"defaultDbfs":-32,"maximumDbfs":0,"stepDb":1,"durationSeconds":0.5}}\n' "$PROTOCOL_VERSION" "$HELPER_VERSION" "$architecture" "$ffplay_available"
   exit 0
 fi
 
@@ -107,45 +111,13 @@ if [ "$operation" = play ]; then
   exec "$ffplay_path" -hide_banner -loglevel warning -nodisp -autoexit -fflags nobuffer -flags low_delay -sync ext -f ogg -
 fi
 
-state_root=${XDG_STATE_HOME:-"$HOME/Library/Application Support"}
-state_dir="$state_root/ssh-mixer"
-state_path="$state_dir/quiet-test-v1"
-previous=
-if [ -f "$state_path" ] && [ ! -L "$state_path" ]; then
-  previous=$(sed -n '1p' "$state_path")
-fi
-case "$previous" in
-  ''|-40|-36|-32|-28|-24) ;;
-  *) previous= ;;
-esac
-if [ -z "$previous" ]; then
-  [ "$dbfs" -eq "$QUIET_START_DBFS" ] || protocol_error "the first quiet test must start at -40 dBFS"
-else
-  expected=$((previous + QUIET_STEP_DB))
-  [ "$dbfs" -eq "$QUIET_START_DBFS" ] || [ "$dbfs" -eq "$previous" ] || [ "$dbfs" -eq "$expected" ] || protocol_error "quiet test increases must use 4 dB steps"
-fi
 if [ "$dbfs" -lt "$QUIET_START_DBFS" ] || [ "$dbfs" -gt "$QUIET_MAXIMUM_DBFS" ]; then
-  protocol_error "quiet test level is outside the approved range"
+  protocol_error "Receiver test level must be between -40 and 0 dBFS"
 fi
-
-case "$dbfs" in
-  -40) amplitude=0.01000000 ;;
-  -36) amplitude=0.01584893 ;;
-  -32) amplitude=0.02511886 ;;
-  -28) amplitude=0.03981072 ;;
-  -24) amplitude=0.06309573 ;;
-  *) protocol_error "quiet test level is outside the approved range" ;;
-esac
+amplitude=$(awk -v dbfs="$dbfs" 'BEGIN { printf "%.8f", exp(log(10) * dbfs / 20) }')
 
 source="aevalsrc=$amplitude*sin(2*PI*440*t):s=48000:d=$QUIET_DURATION_SECONDS"
 filter="afade=t=in:st=0:d=$QUIET_FADE_SECONDS,afade=t=out:st=0.42:d=$QUIET_FADE_SECONDS"
 "$ffplay_path" -hide_banner -loglevel error -nodisp -autoexit -f lavfi -i "$source" -af "$filter" -t "$QUIET_DURATION_SECONDS"
 
-[ ! -L "$state_dir" ] || protocol_error "quiet test state directory is unsafe"
-mkdir -p "$state_dir"
-chmod 700 "$state_dir"
-temporary=$(mktemp "$state_dir/.quiet-test.XXXXXX")
-printf '%s\n' "$dbfs" > "$temporary"
-chmod 600 "$temporary"
-mv -f "$temporary" "$state_path"
 printf '{"schemaVersion":1,"ok":true,"experimental":true,"dbfs":%s,"durationSeconds":0.5,"changesSystemVolume":false}\n' "$dbfs"

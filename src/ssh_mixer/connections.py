@@ -52,10 +52,14 @@ def _default_receiver_name(value: dict[str, Any]) -> str:
     if not host:
         return "Receiver"
     try:
-        ipaddress.ip_address(host.strip("[]"))
-        return host
+        address = ipaddress.ip_address(host.strip("[]"))
     except ValueError:
         return host.split(".", 1)[0]
+    if isinstance(address, ipaddress.IPv4Address):
+        octets = str(address).split(".")
+        return "Receiver " + ".".join(octets[-2:])
+    groups = address.exploded.split(":")
+    return "Receiver " + ":".join(groups[:2]) + "…"
 
 
 def normalize_receiver_name(value: Any, connection: dict[str, Any]) -> str:
@@ -144,9 +148,10 @@ def normalize_connection(value: dict[str, Any]) -> dict[str, Any]:
                 "effectiveConfigHash": effective_hash,
             }
         )
-    normalized["receiverName"] = normalize_receiver_name(
-        value.get("receiverName"), normalized
-    )
+    receiver_name = value.get("receiverName")
+    if str(receiver_name or "").strip().rstrip(".") == host:
+        receiver_name = ""
+    normalized["receiverName"] = normalize_receiver_name(receiver_name, normalized)
     return normalized
 
 

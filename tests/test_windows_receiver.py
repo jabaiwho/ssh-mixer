@@ -452,7 +452,7 @@ class WindowsSetupTest(unittest.TestCase):
                         {
                             "protocol": "v1",
                             "protocolVersion": 1,
-                            "helperVersion": "1.1.1",
+                            "helperVersion": "1.1.2",
                             "platform": "windows",
                             "runtimeElevated": False,
                         }
@@ -499,17 +499,19 @@ class WindowsSetupTest(unittest.TestCase):
             self.assertFalse(self._option_values(command, "ControlPath"))
             self.assertIn("yes", self._option_values(command, "BatchMode"))
 
-    def test_receiver_quiet_test_is_fixed_bounded_faded_and_non_elevated(self) -> None:
+    def test_receiver_test_is_selectable_bounded_faded_and_non_elevated(self) -> None:
         receiver = RECEIVER_PATH.read_text(encoding="utf-8")
         self.assertIn("$QuietStartDbfs = -40", receiver)
-        self.assertIn("$QuietMaximumDbfs = -24", receiver)
-        self.assertIn("$QuietStepDb = 4", receiver)
+        self.assertIn("$QuietDefaultDbfs = -32", receiver)
+        self.assertIn("$QuietMaximumDbfs = 0", receiver)
+        self.assertIn("$QuietStepDb = 1", receiver)
+        self.assertNotIn("$previous + $QuietStepDb", receiver)
         self.assertIn("afade=t=in", receiver)
         self.assertIn("afade=t=out", receiver)
         self.assertIn("st=$($fadeOutStart):d=", receiver)
         self.assertNotIn("$fadeOutStart:d=", receiver)
-        self.assertIn("-Encoding UTF8", receiver)
-        self.assertNotIn("utf8NoBOM", receiver)
+        self.assertNotIn("Save-QuietLevel", receiver)
+        self.assertNotIn("Get-PreviousQuietLevel", receiver)
         self.assertIn("Assert-NonElevated", receiver)
         self.assertNotIn("Set-AudioDevice", receiver)
         self.assertNotIn("Invoke-Expression", receiver)

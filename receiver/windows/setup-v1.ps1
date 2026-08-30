@@ -18,7 +18,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$CompanionVersion = '1.1.1'
+$CompanionVersion = '1.1.2'
 $OpenSshCapability = 'OpenSSH.Server~~~~0.0.1.0'
 $FirewallRuleName = if ($SshPort -eq 22) {
     'OpenSSH-Server-In-TCP'

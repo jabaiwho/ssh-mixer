@@ -48,13 +48,44 @@ class ApplicationTest(unittest.TestCase):
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["schemaVersion"], 1)
-        self.assertEqual(result["config"]["schemaVersion"], 3)
+        self.assertEqual(result["config"]["schemaVersion"], 4)
         self.assertEqual(result["config"]["sourceIds"], [])
         self.assertEqual(result["config"]["sourceMatchers"], [])
         self.assertEqual(result["config"]["mixProfiles"], [])
         self.assertEqual(result["config"]["remote"]["host"], "")
         self.assertEqual(result["config"]["remote"]["user"], "")
         self.assertEqual(result["config"]["remote"]["keyPath"], "")
+
+    def test_receiver_test_accepts_only_an_explicit_whole_db_level(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(Path(temp) / "config"),
+                "XDG_DATA_HOME": str(Path(temp) / "data"),
+                "XDG_STATE_HOME": str(Path(temp) / "state"),
+                "XDG_RUNTIME_DIR": str(Path(temp) / "runtime"),
+            },
+            clear=False,
+        ), patch("ssh_mixer.application.quiet_test") as play:
+            play.return_value = {"ok": True, "dbfs": -32}
+            app = MixerApplication()
+            selected = app.execute(
+                {
+                    "operation": "receiver.quiet-test",
+                    "payload": {"dbfs": -32},
+                }
+            )
+            fractional = app.execute(
+                {
+                    "operation": "receiver.quiet-test",
+                    "payload": {"dbfs": -31.5},
+                }
+            )
+
+        self.assertTrue(selected["ok"])
+        self.assertFalse(fractional["ok"])
+        play.assert_called_once()
+        self.assertEqual(play.call_args.args[1], -32)
 
     def test_configure_protects_application_storage(self) -> None:
         with tempfile.TemporaryDirectory() as temp, patch.dict(

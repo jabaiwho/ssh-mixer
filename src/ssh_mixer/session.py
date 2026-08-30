@@ -641,8 +641,8 @@ def test_connection(remote: dict[str, Any]) -> dict[str, Any]:
 
 
 def quiet_test(remote: dict[str, Any], dbfs: int) -> dict[str, Any]:
-    if dbfs < -40 or dbfs > -24 or (dbfs + 40) % 4 != 0:
-        raise SessionError("quiet test level must be -40 to -24 dBFS in 4 dB steps")
+    if isinstance(dbfs, bool) or not isinstance(dbfs, int) or dbfs < -40 or dbfs > 0:
+        raise SessionError("Receiver test level must be an integer from -40 to 0 dBFS")
     resolved = resolve_remote(remote)
     connection = resolved["connection"]
     if connection.get("securityLevel") != "receiver-only":

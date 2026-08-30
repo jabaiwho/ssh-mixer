@@ -76,6 +76,14 @@ _Avoid_: Microphone, playback source
 A stable description used to find a previously chosen audio source without persisting temporary PipeWire or PulseAudio identifiers.
 _Avoid_: Source ID
 
+**Pinned Source**:
+A Source Matcher the user keeps visible independently of whether the Source is selected or active. Pinning never grants routing consent.
+_Avoid_: Selected source, favorite route
+
+**Recently Used Source**:
+One of at most 20 stable Playback Source Matchers in a protected, clearable local presentation catalog. Recent history never includes Capture Sources and never selects audio.
+_Avoid_: Automatic selection, audio history
+
 **Mix Profile**:
 A saved receiver, Route Mode, Source Matchers, privacy policy, and stream settings that can be deliberately started together.
 _Avoid_: Preset, session config

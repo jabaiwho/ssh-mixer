@@ -559,19 +559,20 @@ class ReceiverProtocolTest(unittest.TestCase):
         self.assertEqual(command[command.index("-sync") + 1], "ext")
         self.assertEqual(command[command.index("-f") + 1], "ogg")
 
-    def test_quiet_test_is_short_faded_bounded_and_stepwise(self) -> None:
-        settings = self.receiver.quiet_test_settings(-40, previous_dbfs=None)
-        self.assertEqual(settings["dbfs"], -40)
+    def test_receiver_test_is_short_faded_bounded_and_selectable_by_one_db(self) -> None:
+        settings = self.receiver.quiet_test_settings(-32, previous_dbfs=None)
+        self.assertEqual(settings["dbfs"], -32)
         self.assertLessEqual(settings["durationSeconds"], 1.0)
         self.assertGreater(settings["fadeInSeconds"], 0)
         self.assertGreater(settings["fadeOutSeconds"], 0)
         self.assertFalse(settings["loop"])
         self.assertFalse(settings["changesSystemVolume"])
-        self.receiver.quiet_test_settings(-36, previous_dbfs=-40)
+        self.receiver.quiet_test_settings(-17, previous_dbfs=-32)
+        self.receiver.quiet_test_settings(0, previous_dbfs=-17)
         with self.assertRaises(self.receiver.ProtocolError):
-            self.receiver.quiet_test_settings(-23, previous_dbfs=-28)
+            self.receiver.quiet_test_settings(-41, previous_dbfs=None)
         with self.assertRaises(self.receiver.ProtocolError):
-            self.receiver.quiet_test_settings(-32, previous_dbfs=-40)
+            self.receiver.quiet_test_settings(1, previous_dbfs=0)
 
     def test_unknown_forced_command_fails_without_running_it(self) -> None:
         completed = subprocess.run(
