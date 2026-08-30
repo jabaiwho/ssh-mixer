@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from .audio import match_source, normalize_source_matcher
+from .audio import (
+    enforce_desktop_all_exclusivity,
+    is_desktop_all_source,
+    match_source,
+    matcher_for_source,
+    normalize_source_matcher,
+)
 
 VALID_DESTINATIONS = {"local", "ssh", "both"}
 DEFAULT_MIX_SINK = "ssh_mixer_mix"
@@ -57,7 +63,21 @@ def resolve_session_source_ids(
         if source_id and source_id not in selected_ids:
             selected_ids.append(source_id)
 
-    return {"sourceIds": selected_ids, "armedPlayback": armed_playback}
+    selected_ids = enforce_desktop_all_exclusivity(sources, selected_ids)
+    selected_sources = [by_id[source_id] for source_id in selected_ids]
+    desktop_all = next(
+        (source for source in selected_sources if is_desktop_all_source(source)),
+        None,
+    )
+    if desktop_all is not None:
+        matchers = [matcher_for_source(desktop_all)]
+        armed_playback = False
+
+    return {
+        "sourceIds": selected_ids,
+        "sourceMatchers": matchers,
+        "armedPlayback": armed_playback,
+    }
 
 
 def build_playback_reconciliation(
@@ -159,6 +179,7 @@ def build_route_plan(
     if destination not in VALID_DESTINATIONS:
         raise RoutingError(f"invalid destination: {destination}")
 
+    source_ids = enforce_desktop_all_exclusivity(sources, source_ids)
     by_id = _source_by_id(sources)
     selected: list[dict[str, Any]] = []
     missing: list[str] = []

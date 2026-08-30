@@ -167,6 +167,7 @@ class SourceMatcherTest(unittest.TestCase):
                     "recent": False,
                     "recentChoice": False,
                     "sensitiveCapture": False,
+                    "exclusiveSelection": False,
                 }
             ],
         )
@@ -370,9 +371,63 @@ class SourceMatcherTest(unittest.TestCase):
                     "recent": True,
                     "recentChoice": False,
                     "sensitiveCapture": False,
+                    "exclusiveSelection": False,
                 }
             ],
         )
+
+    def test_desktop_all_choice_clears_every_other_selected_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(Path(temp) / "config"),
+                "XDG_DATA_HOME": str(Path(temp) / "data"),
+                "XDG_STATE_HOME": str(Path(temp) / "state"),
+                "XDG_RUNTIME_DIR": str(Path(temp) / "runtime"),
+            },
+            clear=False,
+        ):
+            desktop = dict(
+                SOURCES[2],
+                label="Default output monitor",
+                isDefaultMonitor=True,
+            )
+            app = MixerApplication(discover_sources=lambda: [SOURCES[0], desktop])
+            initial = app.execute({"operation": "inspect"})
+            player = next(
+                choice
+                for choice in initial["sourceChoices"]
+                if choice["label"] == "Example Player"
+            )
+            desktop_all = next(
+                choice
+                for choice in initial["sourceChoices"]
+                if choice["label"] == "Desktop (All)"
+            )
+            saved = app.execute(
+                {
+                    "operation": "configure",
+                    "payload": {
+                        "sourceChoiceIds": [player["id"], desktop_all["id"]]
+                    },
+                }
+            )
+            inspected = app.execute({"operation": "inspect"})
+            persisted = config_path().read_text(encoding="utf-8")
+
+        self.assertTrue(saved["ok"])
+        self.assertFalse(player["exclusiveSelection"])
+        self.assertTrue(desktop_all["exclusiveSelection"])
+        self.assertEqual(
+            [
+                choice["label"]
+                for choice in inspected["sourceChoices"]
+                if choice["selected"]
+            ],
+            ["Desktop (All)"],
+        )
+        self.assertNotIn('"processBinary": "example-player"', persisted)
+        self.assertIn('"kind": "monitor"', persisted)
 
     def test_logical_choice_selection_persists_only_stable_matchers(self) -> None:
         with tempfile.TemporaryDirectory() as temp, patch.dict(

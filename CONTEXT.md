@@ -69,7 +69,7 @@ A direct audio input such as a microphone.
 _Avoid_: Input channel
 
 **Output Monitor**:
-A passive source representing audio already being played through a local output device. The primary output monitor is presented as **Desktop (All)**.
+A passive source representing audio already being played through a local output device. The primary output monitor is presented as **Desktop (All)** and is mutually exclusive with every other Source to prevent duplicate capture and output-monitor feedback.
 _Avoid_: Microphone, playback source
 
 **Source Matcher**:

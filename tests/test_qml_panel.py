@@ -46,6 +46,16 @@ class PanelRuntimeSafetyTest(unittest.TestCase):
         self.assertIn("focusColumn + dx", PANEL)
         self.assertNotIn("else switchView(dx)", PANEL)
 
+    def test_desktop_all_disables_other_source_selection_without_disabling_pins(self) -> None:
+        self.assertIn("function desktopAllSelected()", PANEL)
+        self.assertIn("function sourceSelectionEnabled(source)", PANEL)
+        self.assertIn("source.exclusiveSelection === true) list = [id]", PANEL)
+        source_row = PANEL.split("component SourceRow: CursorSurface", 1)[1].split(
+            "component ReceiverButton", 1
+        )[0]
+        self.assertIn("enabled: row.selectionEnabled", source_row)
+        self.assertIn("onClicked: root.pinSource(sourceData)", source_row)
+
     def test_every_stable_click_target_has_an_idle_border(self) -> None:
         stable = PANEL.split("component StableButton: Button", 1)[1]
         self.assertIn("bordered: true", stable)
