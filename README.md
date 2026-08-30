@@ -55,7 +55,7 @@ The panel keeps a bounded collection of verified Connections. Choose the Receive
 
 The mixer labels **Playback Sources**, **Capture Sources**, and **Output Monitors** separately. Concrete `sink-input` and PulseAudio/PipeWire numeric IDs exist only while discovering and starting the current Session; SSH-mixer never writes them to configuration. Saved choices use stable metadata Source Matchers instead.
 
-A selected Playback Source is one logical application choice. It remains visible and armed while inactive, may represent several current streams, and attaches matching streams that appear during the Session. SSH-mixer preserves the normal local default output so unselected applications stay local. Output Monitors still require one unambiguous device match. Capture Source matchers are retained only as recent choices: microphones are never automatically reselected.
+A selected Playback Source is one logical application choice. It remains visible and armed while inactive, may represent several current streams, and attaches matching streams that appear during the Session. Pinning is independent: it keeps an app or input visible without selecting or routing it. A protected, clearable local list retains at most 20 recently observed Playback Source Matchers so useful apps can be pinned later; it never auto-selects audio or includes microphones. SSH-mixer preserves the normal local default output so unselected applications stay local. Output Monitors still require one unambiguous device match. Capture Source matchers are retained only as explicit recent choices: microphones are never automatically reselected.
 
 A Mix Profile retains its Connection, Route Mode, Source Matchers, lock/privacy policy, bitrate, and connection timeout. Saving a playback-only profile can enable **Quick Start**; an inactive Playback Source starts armed and attaches later. Profiles containing Capture Sources disable Quick Start and open the mixer for fresh source selection and confirmation. Missing or ambiguous device Sources also open the mixer without starting a Session.
 
@@ -108,7 +108,7 @@ After saving and trusting a Tailscale or Direct SSH Connection, select **Plan Li
 
 Bootstrap authentication and `sudo` prompts are owned by OpenSSH and the receiver terminal; SSH-mixer does not read or store passwords. Direct root setup is rejected. A failed step is rolled back where safe, and an incomplete rollback is reported explicitly rather than presented as success.
 
-The optional test tone starts at -40 dBFS, lasts 0.5 seconds, fades in and out, and plays once. Each increase requires audible-output confirmation and another user action, advances by 4 dB, and cannot exceed -24 dBFS. It never changes receiver system volume.
+The optional Receiver-test slider defaults to -32 dBFS and selects whole-dB levels from -40 through full-scale 0 dBFS. Moving it is silent; only the explicit Play action emits one 0.5-second faded tone. High levels may be loud, and the test never changes receiver system volume.
 
 ## Windows Receiver setup
 
@@ -128,7 +128,7 @@ macOS support is explicitly **Experimental** because no real-device verification
 
 The adapter supports known `arm64` and `x86_64` Homebrew layouts and fails closed for unknown architectures or executable locations. Its no-change probe covers macOS/OpenSSH versions, architecture, Remote Login, account privilege, Homebrew, and FFplay. After approval, the transparent POSIX Companion Setup can request native macOS approval for Remote Login, install the checksummed non-elevated Receiver helper and forced Managed Identity, and run the exact architecture-specific `brew install ffmpeg` command. SSH-mixer never installs Homebrew itself, bypasses Gatekeeper, clears quarantine metadata, or suppresses macOS security prompts.
 
-Setup verifies the Homebrew formula and FFplay executable, receiver checksum, forced-key restrictions, non-root protocol runtime, arbitrary-command rejection, and forwarding rejection. The shared quiet test still requires audible-output confirmation before any bounded level increase. Failures use the same redacted Diagnostic Report and contribution-link flow as supported platforms; cleanup and incomplete rollback are reported explicitly.
+Setup verifies the Homebrew formula and FFplay executable, receiver checksum, forced-key restrictions, non-root protocol runtime, arbitrary-command rejection, and forwarding rejection. The shared Receiver test uses the same silent bounded level selection and explicit one-shot Play action. Failures use the same redacted Diagnostic Report and contribution-link flow as supported platforms; cleanup and incomplete rollback are reported explicitly.
 
 A compatibility wrapper is included:
 
@@ -137,10 +137,10 @@ bin/cliamp-stream --source cliamp        # Both mode
 bin/cliamp-stream --source cliamp --no-local
 ```
 
-## Destination modes
+## Play audio on
 
-- **Local**: no remote stream and no route changes.
-- **SSH**: selected playback streams move to the temporary SSH-mixer sink and are not preserved locally while the session runs.
+- **This PC** (`local` internally): no remote stream and no route changes.
+- **Receiver** (`ssh` internally): selected playback streams move to the temporary SSH-mixer sink and are not preserved locally while the Session runs.
 - **Both**: selected playback streams move to the temporary SSH-mixer sink and are looped back to their original output.
 
 Changing the destination or selected inputs while a session is active applies the new choice immediately by stopping and restarting the session with the new routing.

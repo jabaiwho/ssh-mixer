@@ -8,10 +8,11 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $Protocol = 'v1'
 $ProtocolVersion = 1
-$HelperVersion = '1.1.1'
+$HelperVersion = '1.1.2'
 $QuietStartDbfs = -40
-$QuietMaximumDbfs = -24
-$QuietStepDb = 4
+$QuietDefaultDbfs = -32
+$QuietMaximumDbfs = 0
+$QuietStepDb = 1
 $QuietDurationSeconds = 0.5
 $QuietFadeSeconds = 0.08
 
@@ -108,8 +109,8 @@ function Parse-ReceiverOperation {
         if (-not [int]::TryParse($parts[4], [ref]$level)) {
             throw 'quiet-test level must be an integer'
         }
-        if ($level -notin @(-40, -36, -32, -28, -24)) {
-            throw 'quiet-test level is outside the approved range'
+        if ($level -lt $QuietStartDbfs -or $level -gt $QuietMaximumDbfs) {
+            throw 'Receiver test level must be between -40 and 0 dBFS'
         }
         return @{ operation = 'quiet-test'; dbfs = $level }
     }
@@ -121,45 +122,10 @@ function Get-QuietStatePath {
     return Join-Path $stateDirectory 'quiet-test-v1.json'
 }
 
-function Get-PreviousQuietLevel {
-    $path = Get-QuietStatePath
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-        return $null
-    }
-    try {
-        $state = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
-        return [int]$state.dbfs
-    }
-    catch {
-        return $null
-    }
-}
-
-function Save-QuietLevel {
-    param([int]$Dbfs)
-    $path = Get-QuietStatePath
-    $directory = Split-Path -Parent $path
-    New-Item -ItemType Directory -Path $directory -Force | Out-Null
-    $temporary = "$path.tmp-$PID"
-    @{ schemaVersion = 1; dbfs = $Dbfs } |
-        ConvertTo-Json -Compress |
-        Set-Content -LiteralPath $temporary -Encoding UTF8
-    Move-Item -LiteralPath $temporary -Destination $path -Force
-}
-
 function Invoke-QuietTest {
     param([int]$Dbfs)
-    $previous = Get-PreviousQuietLevel
-    if ($null -eq $previous) {
-        if ($Dbfs -ne $QuietStartDbfs) {
-            throw 'the first quiet test must start at -40 dBFS'
-        }
-    }
-    elseif ($Dbfs -notin @($QuietStartDbfs, $previous, ($previous + $QuietStepDb))) {
-        throw 'quiet test increases must use 4 dB steps'
-    }
     if ($Dbfs -lt $QuietStartDbfs -or $Dbfs -gt $QuietMaximumDbfs) {
-        throw 'quiet test level is outside the approved range'
+        throw 'Receiver test level must be between -40 and 0 dBFS'
     }
 
     $amplitude = [Math]::Pow(10.0, $Dbfs / 20.0).ToString('0.00000000', [Globalization.CultureInfo]::InvariantCulture)
@@ -170,7 +136,6 @@ function Invoke-QuietTest {
     if ($exitCode -ne 0) {
         throw 'quiet test playback failed'
     }
-    Save-QuietLevel -Dbfs $Dbfs
 }
 
 function Write-Capabilities {
@@ -185,6 +150,7 @@ function Write-Capabilities {
         runtimeElevated = $false
         quietTest = @{
             startDbfs = $QuietStartDbfs
+            defaultDbfs = $QuietDefaultDbfs
             maximumDbfs = $QuietMaximumDbfs
             stepDb = $QuietStepDb
             durationSeconds = $QuietDurationSeconds

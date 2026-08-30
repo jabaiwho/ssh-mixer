@@ -21,7 +21,7 @@ REQUIRED_RESTRICTIONS = {
     "no-pty",
     "no-user-rc",
 }
-QUIET_LEVELS = {-40, -36, -32, -28, -24}
+QUIET_LEVELS = set(range(-40, 1))
 
 
 class SetupError(ValueError):

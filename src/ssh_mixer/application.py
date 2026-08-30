@@ -50,6 +50,7 @@ from .openssh_profiles import (
     profile_connection,
 )
 from .source_choices import build_source_choices, resolve_choice_ids
+from .source_history import SourceHistoryStore
 from .session import (
     SessionError,
     normalize_status,
@@ -122,6 +123,7 @@ class MixerApplication:
         trust_store: TrustStore | None = None,
         remote_remove: RemoteRemover | None = None,
         plugin_remove: PluginRemover | None = None,
+        source_history: SourceHistoryStore | None = None,
     ) -> None:
         self._discover_sources = discover_sources
         self._read_status = read_status
@@ -145,6 +147,7 @@ class MixerApplication:
         self._trust = trust_store
         self._remote_remover = remote_remove
         self._plugin_remover = plugin_remove
+        self._source_history = source_history or SourceHistoryStore()
 
     def execute(self, request: dict[str, Any]) -> dict[str, Any]:
         operation = str(request.get("operation", "unknown")).strip() or "unknown"
@@ -161,6 +164,8 @@ class MixerApplication:
         operation = str(request.get("operation", "")).strip()
         migration_blocked_operations = {
             "configure",
+            "source.pin",
+            "source-history.clear",
             "mix-profile.save",
             "mix-profile.delete",
             "mix-profile.load",
@@ -209,9 +214,12 @@ class MixerApplication:
                         stage="application.configure",
                         code="invalid-request",
                     )
+                config = load_config()
                 choice_selection = resolve_choice_ids(
                     self._discover_sources(),
-                    load_config().get("sourceMatchers", []),
+                    config.get("sourceMatchers", [])
+                    + config.get("pinnedSourceMatchers", [])
+                    + self._source_history.load(),
                     [str(item) for item in choice_ids],
                 )
                 configured_payload["sourceMatchers"] = choice_selection[
@@ -235,6 +243,55 @@ class MixerApplication:
                 "ok": True,
                 "schemaVersion": 1,
                 "config": public_config(config),
+            }
+        if operation == "source.pin":
+            payload = request.get("payload", {})
+            if not isinstance(payload, dict):
+                return self._error(
+                    "Source pin payload must be an object",
+                    stage="application.source.pin",
+                    code="invalid-request",
+                )
+            choice_id = str(payload.get("sourceChoiceId", "")).strip()
+            if not choice_id or not isinstance(payload.get("pinned"), bool):
+                return self._error(
+                    "sourceChoiceId and a pinned boolean are required",
+                    stage="application.source.pin",
+                    code="invalid-request",
+                )
+            config = load_config()
+            sources = self._discover_sources()
+            selection = resolve_choice_ids(
+                sources,
+                config.get("sourceMatchers", [])
+                + config.get("pinnedSourceMatchers", [])
+                + self._source_history.load(),
+                [choice_id],
+            )
+            matcher = selection["sourceMatchers"][0]
+            pinned_matchers = list(config.get("pinnedSourceMatchers", []))
+            if payload["pinned"] and matcher not in pinned_matchers:
+                pinned_matchers.append(matcher)
+            if not payload["pinned"]:
+                pinned_matchers = [
+                    value for value in pinned_matchers if value != matcher
+                ]
+            config["pinnedSourceMatchers"] = pinned_matchers
+            save_config(config)
+            return {
+                "ok": True,
+                "schemaVersion": 1,
+                "config": public_config(config),
+                "sourceChoiceId": choice_id,
+                "pinned": payload["pinned"],
+            }
+        if operation == "source-history.clear":
+            sources = self._discover_sources()
+            self._source_history.clear(sources)
+            return {
+                "ok": True,
+                "schemaVersion": 1,
+                "cleared": True,
             }
         if operation == "migration.inspect":
             return self._migration.inspect()
@@ -394,9 +451,12 @@ class MixerApplication:
             profile_value = dict(payload)
             if "sourceChoiceIds" in payload:
                 available_sources = self._discover_sources()
+                selection_config = load_config()
                 choice_selection = resolve_choice_ids(
                     available_sources,
-                    load_config().get("sourceMatchers", []),
+                    selection_config.get("sourceMatchers", [])
+                    + selection_config.get("pinnedSourceMatchers", [])
+                    + self._source_history.load(),
                     [str(item) for item in choice_ids],
                 )
                 profile_value["sourceMatchers"] = choice_selection[
@@ -669,11 +729,10 @@ class MixerApplication:
                     stage="receiver.quiet-test",
                     code="invalid-request",
                 )
-            try:
-                dbfs = int(payload.get("dbfs", -40))
-            except (TypeError, ValueError):
+            dbfs = payload.get("dbfs", -32)
+            if isinstance(dbfs, bool) or not isinstance(dbfs, int):
                 return self._error(
-                    "quiet test level must be an integer",
+                    "Receiver test level must be an integer",
                     stage="receiver.quiet-test",
                     code="invalid-request",
                 )
@@ -1568,6 +1627,7 @@ class MixerApplication:
     def _inspect(self) -> dict[str, Any]:
         config = load_config()
         sources = [dict(source) for source in self._discover_sources()]
+        recent_matchers = self._source_history.observe(sources)
         resolution = resolve_source_matchers(
             sources, config.get("sourceMatchers", [])
         )
@@ -1586,7 +1646,10 @@ class MixerApplication:
             "schemaVersion": 1,
             "sources": sources,
             "sourceChoices": build_source_choices(
-                sources, config.get("sourceMatchers", [])
+                sources,
+                config.get("sourceMatchers", []),
+                config.get("pinnedSourceMatchers", []),
+                recent_matchers,
             ),
             "connectionOptions": {
                 "tailscaleRecommended": True,

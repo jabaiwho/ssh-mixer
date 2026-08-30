@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-COMPANION_VERSION=1.1.1
+COMPANION_VERSION=1.1.2
 MODE=${1:-}
 
 json_error() {

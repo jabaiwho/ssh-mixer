@@ -24,10 +24,11 @@ from typing import NamedTuple
 PROTOCOL = "ssh-mixer-receiver"
 VERSION = "v1"
 PROTOCOL_VERSION = 1
-HELPER_VERSION = "1.1.1"
+HELPER_VERSION = "1.1.2"
 QUIET_START_DBFS = -40
-QUIET_MAX_DBFS = -24
-QUIET_STEP_DB = 4
+QUIET_DEFAULT_DBFS = -32
+QUIET_MAX_DBFS = 0
+QUIET_STEP_DB = 1
 QUIET_DURATION_SECONDS = 0.5
 QUIET_FADE_SECONDS = 0.08
 
@@ -65,13 +66,11 @@ def parse_operation(command: str) -> Operation:
 
 
 def quiet_test_settings(dbfs: int, *, previous_dbfs: int | None) -> dict[str, object]:
-    if previous_dbfs is None:
-        if dbfs != QUIET_START_DBFS:
-            raise ProtocolError("the first quiet test must start at -40 dBFS")
-    elif dbfs not in {QUIET_START_DBFS, previous_dbfs, previous_dbfs + QUIET_STEP_DB}:
-        raise ProtocolError("quiet test increases must use 4 dB steps")
+    del previous_dbfs
+    if isinstance(dbfs, bool) or not isinstance(dbfs, int):
+        raise ProtocolError("Receiver test level must be an integer")
     if dbfs < QUIET_START_DBFS or dbfs > QUIET_MAX_DBFS:
-        raise ProtocolError("quiet test level must be between -40 and -24 dBFS")
+        raise ProtocolError("Receiver test level must be between -40 and 0 dBFS")
     return {
         "dbfs": dbfs,
         "durationSeconds": QUIET_DURATION_SECONDS,
@@ -87,28 +86,6 @@ def state_path() -> Path:
     return state_home / "ssh-mixer" / "quiet-test-v1.json"
 
 
-def previous_quiet_level() -> int | None:
-    path = state_path()
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    level = value.get("dbfs") if isinstance(value, dict) else None
-    return level if isinstance(level, int) else None
-
-
-def save_quiet_level(dbfs: int) -> None:
-    path = state_path()
-    if path.parent.is_symlink() or path.is_symlink():
-        raise ProtocolError("quiet test state path is unsafe")
-    path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
-    path.parent.chmod(0o700)
-    temporary = path.with_suffix(f".tmp-{os.getpid()}")
-    temporary.write_text(json.dumps({"schemaVersion": 1, "dbfs": dbfs}) + "\n", encoding="utf-8")
-    temporary.chmod(0o600)
-    os.replace(temporary, path)
-
-
 def capabilities() -> dict[str, object]:
     return {
         "schemaVersion": 1,
@@ -121,6 +98,7 @@ def capabilities() -> dict[str, object]:
         "ffplay": shutil.which("ffplay") is not None,
         "quietTest": {
             "startDbfs": QUIET_START_DBFS,
+            "defaultDbfs": QUIET_DEFAULT_DBFS,
             "maximumDbfs": QUIET_MAX_DBFS,
             "stepDb": QUIET_STEP_DB,
             "durationSeconds": QUIET_DURATION_SECONDS,
@@ -170,7 +148,7 @@ def play() -> int:
 
 
 def run_quiet_test(dbfs: int) -> int:
-    settings = quiet_test_settings(dbfs, previous_dbfs=previous_quiet_level())
+    settings = quiet_test_settings(dbfs, previous_dbfs=None)
     ffmpeg = shutil.which("ffmpeg")
     ffplay = shutil.which("ffplay")
     if not ffmpeg or not ffplay:
@@ -214,7 +192,6 @@ def run_quiet_test(dbfs: int) -> int:
     producer_status = producer.wait()
     if producer_status != 0 or consumer.returncode != 0:
         raise ProtocolError("quiet test playback failed")
-    save_quiet_level(int(settings["dbfs"]))
     return 0
 
 

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 APP_ID = "ssh-mixer"
-CONFIG_SCHEMA_VERSION = 3
+CONFIG_SCHEMA_VERSION = 4
 STATE_SCHEMA_VERSION = 1
 PRIVATE_DIR_MODE = 0o700
 PRIVATE_FILE_MODE = 0o600
@@ -22,6 +22,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "schemaVersion": CONFIG_SCHEMA_VERSION,
     "sourceIds": [],
     "sourceMatchers": [],
+    "pinnedSourceMatchers": [],
     "destination": "both",
     "connection": None,
     "connections": [],
@@ -264,16 +265,22 @@ def normalize_config(config: dict[str, Any] | None) -> dict[str, Any]:
     from .audio import normalize_source_matcher
     from .mix_profiles import normalize_mix_profiles, normalize_privacy
 
-    source_matchers: list[dict[str, Any]] = []
-    raw_matchers = merged.get("sourceMatchers", [])
-    if isinstance(raw_matchers, list):
+    def normalized_matchers(key: str) -> list[dict[str, Any]]:
+        matchers: list[dict[str, Any]] = []
+        raw_matchers = merged.get(key, [])
+        if not isinstance(raw_matchers, list):
+            return matchers
         for raw_matcher in raw_matchers[:32]:
             try:
                 matcher = normalize_source_matcher(raw_matcher)
             except ValueError:
                 continue
-            if matcher not in source_matchers:
-                source_matchers.append(matcher)
+            if matcher not in matchers:
+                matchers.append(matcher)
+        return matchers
+
+    source_matchers = normalized_matchers("sourceMatchers")
+    pinned_source_matchers = normalized_matchers("pinnedSourceMatchers")
 
     from .connections import normalize_connection, normalize_connections, upsert_connection
 
@@ -301,6 +308,7 @@ def normalize_config(config: dict[str, Any] | None) -> dict[str, Any]:
         "schemaVersion": CONFIG_SCHEMA_VERSION,
         "sourceIds": source_ids,
         "sourceMatchers": source_matchers,
+        "pinnedSourceMatchers": pinned_source_matchers,
         "destination": destination,
         "connection": connection,
         "connections": connections,
@@ -325,6 +333,8 @@ def config_from_payload(payload: dict[str, Any], base: dict[str, Any] | None = N
         incoming["sourceIds"] = payload["sources"]
     if "sourceMatchers" in payload:
         incoming["sourceMatchers"] = payload["sourceMatchers"]
+    if "pinnedSourceMatchers" in payload:
+        incoming["pinnedSourceMatchers"] = payload["pinnedSourceMatchers"]
 
     if "connection" in payload:
         incoming["connection"] = payload["connection"]

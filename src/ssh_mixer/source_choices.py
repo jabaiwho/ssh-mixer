@@ -77,15 +77,15 @@ def _normalized_unique(matchers: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _choice_groups(
-    sources: list[dict[str, Any]], selected_matchers: list[dict[str, Any]]
+    sources: list[dict[str, Any]], catalog_matchers: list[dict[str, Any]]
 ) -> tuple[
     list[dict[str, Any]],
     dict[str, list[dict[str, Any]]],
 ]:
-    selected = _normalized_unique(selected_matchers)
-    matchers = list(selected)
+    catalog = _normalized_unique(catalog_matchers)
+    matchers = list(catalog)
     members_by_id: dict[str, list[dict[str, Any]]] = {
-        _choice_id(matcher): [] for matcher in selected
+        _choice_id(matcher): [] for matcher in catalog
     }
     for source in sources:
         try:
@@ -101,7 +101,10 @@ def _choice_groups(
 
 
 def build_source_choices(
-    sources: list[dict[str, Any]], selected_matchers: list[dict[str, Any]]
+    sources: list[dict[str, Any]],
+    selected_matchers: list[dict[str, Any]],
+    pinned_matchers: list[dict[str, Any]] | None = None,
+    recent_matchers: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Present logical Sources without exposing temporary stream identity.
 
@@ -112,7 +115,11 @@ def build_source_choices(
     """
 
     selected = _normalized_unique(selected_matchers)
-    matchers, members_by_id = _choice_groups(sources, selected)
+    pinned = _normalized_unique(pinned_matchers or [])
+    recent = _normalized_unique(recent_matchers or [])
+    matchers, members_by_id = _choice_groups(
+        sources, selected + pinned + recent
+    )
     choices: list[dict[str, Any]] = []
     for matcher in matchers:
         choice_id = _choice_id(matcher)
@@ -129,6 +136,8 @@ def build_source_choices(
                 "active": bool(members),
                 "activeStreamCount": len(members),
                 "selected": remembered and kind != "capture",
+                "pinned": matcher in pinned,
+                "recent": matcher in recent,
                 "recentChoice": remembered and kind == "capture",
                 "sensitiveCapture": kind == "capture",
             }
@@ -137,6 +146,7 @@ def build_source_choices(
         key=lambda choice: (
             _TYPE_ORDER.get(str(choice["type"]), 99),
             not bool(choice["selected"]),
+            not bool(choice["pinned"]),
             str(choice["label"]).casefold(),
             str(choice["id"]),
         )

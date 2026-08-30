@@ -14,6 +14,7 @@ from ssh_mixer.audio import (
     resolve_source_matchers,
 )
 from ssh_mixer.config import config_path
+from ssh_mixer.source_history import SourceHistoryStore, source_history_path
 
 
 SOURCES = [
@@ -162,11 +163,138 @@ class SourceMatcherTest(unittest.TestCase):
                     "active": False,
                     "activeStreamCount": 0,
                     "selected": True,
+                    "pinned": False,
+                    "recent": False,
                     "recentChoice": False,
                     "sensitiveCapture": False,
                 }
             ],
         )
+
+    def test_recent_playback_can_be_pinned_without_becoming_selected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(Path(temp) / "config"),
+                "XDG_DATA_HOME": str(Path(temp) / "data"),
+                "XDG_STATE_HOME": str(Path(temp) / "state"),
+                "XDG_RUNTIME_DIR": str(Path(temp) / "runtime"),
+            },
+            clear=False,
+        ):
+            visible_sources = [SOURCES[0]]
+            app = MixerApplication(discover_sources=lambda: list(visible_sources))
+            initial = app.execute({"operation": "inspect"})
+            player = next(
+                choice
+                for choice in initial["sourceChoices"]
+                if choice["label"] == "Example Player"
+            )
+            self.assertTrue(player["recent"])
+            self.assertFalse(player["pinned"])
+            self.assertFalse(player["selected"])
+
+            visible_sources.clear()
+            remembered = app.execute({"operation": "inspect"})
+            recent_player = next(
+                choice
+                for choice in remembered["sourceChoices"]
+                if choice["label"] == "Example Player"
+            )
+            self.assertFalse(recent_player["active"])
+            self.assertTrue(recent_player["recent"])
+
+            pinned = app.execute(
+                {
+                    "operation": "source.pin",
+                    "payload": {"sourceChoiceId": player["id"], "pinned": True},
+                }
+            )
+            cleared = app.execute({"operation": "source-history.clear"})
+            final = app.execute({"operation": "inspect"})
+            pinned_player = next(
+                choice
+                for choice in final["sourceChoices"]
+                if choice["label"] == "Example Player"
+            )
+            persisted = config_path().read_text(encoding="utf-8")
+
+        self.assertTrue(pinned["ok"])
+        self.assertTrue(cleared["ok"])
+        self.assertTrue(pinned_player["pinned"])
+        self.assertFalse(pinned_player["selected"])
+        self.assertFalse(pinned_player["recent"])
+        self.assertNotIn("sink-input:101", persisted)
+        self.assertIn('"pinnedSourceMatchers"', persisted)
+
+    def test_recent_history_is_private_bounded_and_excludes_capture(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(Path(temp) / "config"),
+                "XDG_DATA_HOME": str(Path(temp) / "data"),
+                "XDG_STATE_HOME": str(Path(temp) / "state"),
+                "XDG_RUNTIME_DIR": str(Path(temp) / "runtime"),
+            },
+            clear=False,
+        ):
+            playback = [
+                dict(
+                    SOURCES[0],
+                    id=f"sink-input:{index}",
+                    pulseId=str(index),
+                    applicationName=f"Player {index}",
+                    processBinary=f"player-{index}",
+                )
+                for index in range(25)
+            ]
+            store = SourceHistoryStore()
+            recent = store.observe(playback + [SOURCES[1]])
+            mode = source_history_path().stat().st_mode & 0o777
+
+        self.assertEqual(len(recent), 20)
+        self.assertTrue(all(matcher["kind"] == "playback" for matcher in recent))
+        self.assertEqual(mode, 0o600)
+
+    def test_pinned_playback_remains_visible_after_it_is_deselected(self) -> None:
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                "XDG_CONFIG_HOME": str(Path(temp) / "config"),
+                "XDG_DATA_HOME": str(Path(temp) / "data"),
+                "XDG_STATE_HOME": str(Path(temp) / "state"),
+                "XDG_RUNTIME_DIR": str(Path(temp) / "runtime"),
+            },
+            clear=False,
+        ):
+            app = MixerApplication(discover_sources=lambda: SOURCES)
+            initial = app.execute({"operation": "inspect"})
+            player = next(
+                choice
+                for choice in initial["sourceChoices"]
+                if choice["label"] == "Example Player"
+            )
+            app.execute(
+                {
+                    "operation": "source.pin",
+                    "payload": {"sourceChoiceId": player["id"], "pinned": True},
+                }
+            )
+            app.execute(
+                {
+                    "operation": "configure",
+                    "payload": {"sourceChoiceIds": []},
+                }
+            )
+            inspected = app.execute({"operation": "inspect"})
+
+        pinned_player = next(
+            choice
+            for choice in inspected["sourceChoices"]
+            if choice["label"] == "Example Player"
+        )
+        self.assertTrue(pinned_player["pinned"])
+        self.assertFalse(pinned_player["selected"])
 
     def test_one_playback_choice_groups_every_active_stream_for_an_application(self) -> None:
         with tempfile.TemporaryDirectory() as temp, patch.dict(
@@ -197,6 +325,8 @@ class SourceMatcherTest(unittest.TestCase):
                     "active": True,
                     "activeStreamCount": 2,
                     "selected": False,
+                    "pinned": False,
+                    "recent": True,
                     "recentChoice": False,
                     "sensitiveCapture": False,
                 }
