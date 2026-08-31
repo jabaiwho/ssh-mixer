@@ -401,8 +401,16 @@ Item {
     var source = pendingCaptureSource
     pendingCaptureSource = null
     if (!source) return
-    if (source.restartSelection === true) requestSessionApply(true)
-    else selectSource(source, true)
+    if (source.restartSelection === true) {
+      pendingSession = source.session
+      if (!pendingSession) {
+        setOperationError("Capture confirmation request is unavailable.")
+        return
+      }
+      message = "Applying confirmed Capture Inputs to "
+        + String(pendingSession.destination || "both").toUpperCase() + "…"
+      if (!busy) applyPendingSession()
+    } else selectSource(source, true)
   }
 
   function cancelCaptureSource() {
@@ -442,24 +450,25 @@ Item {
   function requestSessionApply(captureConfirmed, startWhenStopped, reuseConfiguredSelection) {
     var capture = selectedCaptureSource()
     var willStart = activeSession || startWhenStopped !== false
-    if (PanelSession.requiresCaptureConfirmation(!!capture && willStart, captureConfirmed)) {
-      pendingSession = null
-      pendingCaptureSource = {
-        label: String(capture.label || "this Capture Input"),
-        restartSelection: true
-      }
-      message = "Confirm before starting or restarting Capture audio."
-      focusCaptureConfirmation()
-      return
-    }
-    pendingCaptureSource = null
-    pendingSession = {
+    var desiredSession = {
       destination: destination,
       sourceChoiceIds: selectedIds.slice(),
       startWhenStopped: startWhenStopped !== false,
       reuseConfiguredSelection: reuseConfiguredSelection === true,
       configurationRevision: configurationRevision
     }
+    if (PanelSession.requiresCaptureConfirmation(!!capture && willStart, captureConfirmed)) {
+      pendingSession = null
+      pendingCaptureSource = PanelSession.captureConfirmation(
+        String(capture.label || "this Capture Input"),
+        desiredSession
+      )
+      message = "Confirm before starting or restarting Capture audio."
+      focusCaptureConfirmation()
+      return
+    }
+    pendingCaptureSource = null
+    pendingSession = desiredSession
     message = selectedIds.length > 0
       ? "Applying Inputs to " + destination.toUpperCase() + "…"
       : "Ending the stream and cleaning up…"

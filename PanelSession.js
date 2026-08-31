@@ -14,6 +14,22 @@ function operationMatchesConfiguration(operationRevision, currentRevision) {
   return Number(operationRevision) === Number(currentRevision)
 }
 
+function captureConfirmation(label, desiredSession) {
+  const desired = desiredSession || ({})
+  return {
+    label: String(label || "this Capture Input"),
+    restartSelection: true,
+    session: {
+      destination: String(desired.destination || "both"),
+      sourceChoiceIds: desired.sourceChoiceIds instanceof Array
+        ? desired.sourceChoiceIds.slice() : [],
+      startWhenStopped: desired.startWhenStopped !== false,
+      reuseConfiguredSelection: desired.reuseConfiguredSelection === true,
+      configurationRevision: Number(desired.configurationRevision || 0)
+    }
+  }
+}
+
 function requiresCaptureConfirmation(hasCapture, captureConfirmed) {
   return hasCapture === true && captureConfirmed !== true
 }
