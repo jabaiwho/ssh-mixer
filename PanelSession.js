@@ -1,13 +1,11 @@
 .pragma library
 
-function nextCommand(activeSession, sourceChoiceIds, destination, startWhenStopped) {
+function nextCommand(activeSession, sourceChoiceIds, destination, startWhenStopped, reuseConfiguredSelection) {
   const ids = sourceChoiceIds instanceof Array ? sourceChoiceIds.slice() : []
-  const payload = {
-    destination: String(destination || "both"),
-    sourceChoiceIds: ids
-  }
+  const payload = { destination: String(destination || "both") }
+  if (reuseConfiguredSelection !== true) payload.sourceChoiceIds = ids
   if (activeSession) return { action: "stop", payload: payload }
-  if (ids.length > 0 && startWhenStopped !== false)
+  if (startWhenStopped !== false && (reuseConfiguredSelection === true || ids.length > 0))
     return { action: "start", payload: payload }
   return { action: "selectionSave", payload: payload }
 }

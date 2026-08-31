@@ -384,13 +384,15 @@ Item {
   function chooseDestination(value) {
     var next = normalizeDestination(value)
     if (destination !== next) {
+      var reuseConfiguredSelection = !configurationDirty
+        && status.captureActive !== true
       destination = next
       configurationDirty = true
-      requestSessionApply(false, activeSession)
+      requestSessionApply(false, activeSession, reuseConfiguredSelection)
     }
   }
 
-  function requestSessionApply(captureConfirmed, startWhenStopped) {
+  function requestSessionApply(captureConfirmed, startWhenStopped, reuseConfiguredSelection) {
     var capture = selectedCaptureSource()
     var willStart = activeSession || startWhenStopped !== false
     if (PanelSession.requiresCaptureConfirmation(!!capture && willStart, captureConfirmed)) {
@@ -407,7 +409,8 @@ Item {
     pendingSession = {
       destination: destination,
       sourceChoiceIds: selectedIds.slice(),
-      startWhenStopped: startWhenStopped !== false
+      startWhenStopped: startWhenStopped !== false,
+      reuseConfiguredSelection: reuseConfiguredSelection === true
     }
     message = selectedIds.length > 0
       ? "Applying Inputs to " + destination.toUpperCase() + "…"
@@ -422,7 +425,8 @@ Item {
       activeSession,
       desired.sourceChoiceIds,
       desired.destination,
-      desired.startWhenStopped
+      desired.startWhenStopped,
+      desired.reuseConfiguredSelection
     )
     if (command.action !== "stop") pendingSession = null
     run(command.action, command.payload)

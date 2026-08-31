@@ -39,8 +39,10 @@ class PanelRuntimeSafetyTest(unittest.TestCase):
 
     def test_source_selection_drives_sessions_but_capture_requires_confirmation(self) -> None:
         self.assertIn('import "PanelSession.js" as PanelSession', PANEL)
-        self.assertIn("function requestSessionApply(captureConfirmed, startWhenStopped)", PANEL)
+        self.assertIn("function requestSessionApply(captureConfirmed, startWhenStopped, reuseConfiguredSelection)", PANEL)
         self.assertIn("PanelSession.nextCommand(", PANEL)
+        self.assertIn("var reuseConfiguredSelection = !configurationDirty", PANEL)
+        self.assertIn("requestSessionApply(false, activeSession, reuseConfiguredSelection)", PANEL)
         self.assertIn("function confirmCaptureSource()", PANEL)
         self.assertIn("property var pendingCaptureSource: null", PANEL)
         self.assertIn("captureSession && sources[i].recentChoice === true", PANEL)
