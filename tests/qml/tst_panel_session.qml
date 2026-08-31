@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import "../../PanelAlerts.js" as PanelAlerts
+import "../../PanelNavigation.js" as PanelNavigation
 import "../../PanelSession.js" as PanelSession
 
 TestCase {
@@ -72,6 +73,31 @@ TestCase {
 
     verify(!result.scrollTop)
     compare(result.revealedError, "replacement failed")
+  }
+
+  function test_geometry_navigation_moves_vertically_between_rows() {
+    const items = [
+      { x: 0, y: 0, width: 80, height: 20 },
+      { x: 90, y: 0, width: 80, height: 20 },
+      { x: 0, y: 35, width: 80, height: 20 },
+      { x: 90, y: 35, width: 80, height: 20 }
+    ]
+
+    compare(PanelNavigation.firstIndex(items), 0)
+    compare(PanelNavigation.nextIndex(items, 1, 0, 1), 3)
+    compare(PanelNavigation.nextIndex(items, 3, 0, -1), 1)
+  }
+
+  function test_geometry_navigation_keeps_horizontal_motion_in_row() {
+    const items = [
+      { x: 0, y: 0, width: 80, height: 20 },
+      { x: 90, y: 0, width: 80, height: 20 },
+      { x: 0, y: 35, width: 80, height: 20 }
+    ]
+
+    compare(PanelNavigation.nextIndex(items, 0, 1, 0), 1)
+    compare(PanelNavigation.nextIndex(items, 1, 1, 0), 1)
+    compare(PanelNavigation.nextIndex(items, 0, -1, 0), 0)
   }
 
   function test_numbered_sections_are_bounded() {
