@@ -13,6 +13,12 @@ TestCase {
     verify(430 <= target + 100)
   }
 
+  function test_inputs_section_reveals_panel_header_and_close_button() {
+    const target = PanelScroll.sectionTargetY(240, 100, 600, 360, 430, 8, true)
+
+    compare(target, 0)
+  }
+
   function test_tall_section_prioritizes_header_and_maximum_body() {
     const target = PanelScroll.sectionTargetY(100, 180, 900, 520, 820, 8)
 

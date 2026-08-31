@@ -255,7 +255,8 @@ Item {
       flick.contentHeight,
       headerPoint.y,
       bodyPoint.y + body.height,
-      Style.space(8)
+      Style.space(8),
+      section === "sources"
     )
   }
 
@@ -1491,11 +1492,12 @@ Item {
     if (nextIndex < 0 || nextIndex === currentIndex) return
     keyboardTarget = items[nextIndex].item
     var nextSection = sectionForItem(keyboardTarget)
-    if (nextSection && nextSection !== focusSection) {
+    var sectionChanged = nextSection && nextSection !== focusSection
+    if (sectionChanged) {
       focusSection = nextSection
       activeSection = nextSection
-    }
-    scheduleFocusScroll()
+      scheduleSectionScroll(nextSection)
+    } else scheduleFocusScroll()
   }
 
   function tabSection(direction) {

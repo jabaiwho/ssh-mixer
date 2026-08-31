@@ -85,6 +85,7 @@ class PanelRuntimeSafetyTest(unittest.TestCase):
         self.assertIn("function ensureSectionVisible(section)", PANEL)
         self.assertIn("PanelScroll.sectionTargetY(", PANEL)
         self.assertIn("root.ensureSectionVisible(section)", PANEL)
+        self.assertIn("scheduleSectionScroll(nextSection)", PANEL)
         self.assertNotIn("focusColumn + dx", PANEL)
         self.assertNotIn("else switchView(dx)", PANEL)
 
