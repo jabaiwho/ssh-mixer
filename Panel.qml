@@ -6,6 +6,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
+import "PanelAlerts.js" as PanelAlerts
 import "PanelScroll.js" as PanelScroll
 import "PanelSession.js" as PanelSession
 
@@ -64,6 +65,8 @@ Item {
   property var pendingSession: null
   property var pendingCaptureSource: null
   property string message: ""
+  property string operationError: ""
+  property string lastRevealedError: ""
   property bool busy: false
   property string action: ""
   property bool quietAction: false
@@ -92,6 +95,7 @@ Item {
   readonly property color dim: Color.muted
   readonly property color urgent: Color.urgent
   readonly property bool activeSession: !!status.active || status.state === "streaming" || status.state === "local" || status.state === "starting"
+  readonly property string prominentError: String(status.error || operationError || "")
   readonly property string statusText: {
     var s = String(status.state || "stopped")
     if (s === "streaming" && status.captureActive) return "Recording/capture Session"
@@ -116,6 +120,30 @@ Item {
     var user = String(remote.user || "")
     if (!host) return "Not configured"
     return user ? (user + "@" + host) : host
+  }
+
+  function revealProminentError() {
+    var decision = PanelAlerts.revealDecision(
+      lastRevealedError,
+      prominentError,
+      opened
+    )
+    lastRevealedError = decision.revealedError
+    if (!decision.scrollTop) return
+    var expectedError = prominentError
+    Qt.callLater(function() {
+      if (root.opened && root.prominentError === expectedError) flick.contentY = 0
+    })
+  }
+
+  function updateStatus(nextStatus) {
+    status = nextStatus || ({ state: "stopped", active: false, error: "" })
+    revealProminentError()
+  }
+
+  function setOperationError(value) {
+    operationError = String(value || "")
+    revealProminentError()
   }
 
   function sectionOrder() {
@@ -253,6 +281,8 @@ Item {
       configurationDirty = true
     }
     opened = true
+    lastRevealedError = ""
+    revealProminentError()
     cursorActive = false
     if (!activeSection) activeSection = "sources"
     focusSection = activeSection
@@ -782,6 +812,7 @@ Item {
 
   function run(kind, payload, quiet) {
     if (proc.running) return
+    if (quiet !== true) setOperationError("")
     busy = true
     action = kind
     quietAction = quiet === true
@@ -919,7 +950,7 @@ Item {
   function applySnapshot(data) {
     recentCaptureIds = []
     if (data.sourceChoices instanceof Array) sources = data.sourceChoices.slice()
-    if (data.status) status = data.status
+    if (data.status) updateStatus(data.status)
     if (data.config) {
       if (!configurationDirty) {
         destination = normalizeDestination(data.config.destination)
@@ -958,11 +989,11 @@ Item {
     if (data.connectionOptions && data.connectionOptions.openSshProfiles instanceof Array)
       openSshProfiles = data.connectionOptions.openSshProfiles.slice()
     clampCursor()
-    if (cursorActive) scheduleFocusScroll()
+    if (cursorActive && prominentError === "") scheduleFocusScroll()
   }
 
   function applyStatus(data) {
-    if (data.status) status = data.status
+    if (data.status) updateStatus(data.status)
     if (data.config && data.config.remote) remote = data.config.remote
   }
 
@@ -981,7 +1012,15 @@ Item {
     var raw = procOut || "{}"
     var data = {}
     try { data = JSON.parse(raw) || {} } catch (e) { data = { ok: false, error: procErr || "Could not parse ssh-mixer output" } }
-    if (!data.ok) diagnosticAvailable = true
+    if (!data.ok) {
+      diagnosticAvailable = true
+      setOperationError(
+        data.error
+          || (data.connection && data.connection.error)
+          || procErr
+          || "SSH-mixer operation failed"
+      )
+    }
 
     if (action === "snapshot") {
       applySnapshot(data)
@@ -1610,6 +1649,54 @@ Item {
               }
 
               PanelSeparator { foreground: root.foreground; width: parent.width }
+
+              Rectangle {
+                id: sessionErrorBanner
+                x: Style.space(6)
+                width: parent.width - Style.space(12)
+                height: sessionErrorContent.implicitHeight + Style.space(20)
+                visible: root.prominentError !== ""
+                color: Util.alpha(root.urgent, 0.14)
+                radius: Style.cornerRadius
+                border.color: root.urgent
+                border.width: Math.max(1, Style.space(2))
+
+                Column {
+                  id: sessionErrorContent
+                  anchors.left: parent.left
+                  anchors.right: parent.right
+                  anchors.verticalCenter: parent.verticalCenter
+                  anchors.margins: Style.space(10)
+                  spacing: Style.space(5)
+
+                  Text {
+                    width: parent.width
+                    text: "SSH-MIXER ERROR"
+                    color: root.urgent
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.body
+                    font.bold: true
+                    wrapMode: Text.WordWrap
+                  }
+                  Text {
+                    width: parent.width
+                    text: root.prominentError
+                    color: root.foreground
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.bodySmall
+                    font.bold: true
+                    wrapMode: Text.WordWrap
+                  }
+                  Text {
+                    width: parent.width
+                    text: "Press 6 for detailed, locally redacted diagnostics."
+                    color: root.dim
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    wrapMode: Text.WordWrap
+                  }
+                }
+              }
 
               Column {
                 width: parent.width
@@ -3081,9 +3168,9 @@ Item {
 
               Text {
                 width: parent.width
-                visible: root.message !== "" || root.status.error
-                text: root.status.error ? root.status.error : root.message
-                color: root.status.error ? root.urgent : root.dim
+                visible: root.message !== "" && root.prominentError === ""
+                text: root.message
+                color: root.dim
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.bodySmall
                 wrapMode: Text.WordWrap
