@@ -51,6 +51,20 @@ class PanelRuntimeSafetyTest(unittest.TestCase):
         self.assertIn('proc.command = [backend, "configure", "--json", JSON.stringify(payload || {})]', PANEL)
         self.assertNotIn('label: root.activeSession ? "Stop" : "Start"', PANEL)
 
+    def test_session_completion_clears_only_its_own_configuration_revision(self) -> None:
+        self.assertIn("property int configurationRevision: 0", PANEL)
+        self.assertIn("property int actionConfigurationRevision: -1", PANEL)
+        self.assertIn("function markConfigurationDirty()", PANEL)
+        self.assertEqual(PANEL.count("configurationDirty = true"), 1)
+        self.assertEqual(PANEL.count("configurationDirty = false"), 1)
+        self.assertIn("configurationRevision: configurationRevision", PANEL)
+        self.assertIn(
+            "actionConfigurationRevision = desired.configurationRevision", PANEL
+        )
+        self.assertIn(
+            "PanelSession.operationMatchesConfiguration(", PANEL
+        )
+
     def test_errors_are_prominent_above_inputs_and_revealed_once(self) -> None:
         self.assertIn('import "PanelAlerts.js" as PanelAlerts', PANEL)
         self.assertIn("property string operationError: \"\"", PANEL)
