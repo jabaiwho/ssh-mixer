@@ -75,17 +75,17 @@ TestCase {
     compare(result.revealedError, "replacement failed")
   }
 
-  function test_geometry_navigation_moves_vertically_between_rows() {
+  function test_geometry_navigation_moves_vertically_to_leftmost_button() {
     const items = [
       { x: 0, y: 0, width: 80, height: 20 },
       { x: 90, y: 0, width: 80, height: 20 },
-      { x: 0, y: 35, width: 80, height: 20 },
+      { x: 0, y: 37, width: 80, height: 20 },
       { x: 90, y: 35, width: 80, height: 20 }
     ]
 
     compare(PanelNavigation.firstIndex(items), 0)
-    compare(PanelNavigation.nextIndex(items, 1, 0, 1), 3)
-    compare(PanelNavigation.nextIndex(items, 3, 0, -1), 1)
+    compare(PanelNavigation.nextIndex(items, 1, 0, 1), 2)
+    compare(PanelNavigation.nextIndex(items, 3, 0, -1), 0)
   }
 
   function test_geometry_navigation_keeps_horizontal_motion_in_row() {
