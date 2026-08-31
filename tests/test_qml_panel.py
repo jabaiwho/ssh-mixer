@@ -99,6 +99,17 @@ class PanelRuntimeSafetyTest(unittest.TestCase):
         self.assertIn("enabled: row.selectionEnabled", source_row)
         self.assertIn("onClicked: root.pinSource(sourceData)", source_row)
 
+    def test_input_pin_control_uses_an_explicit_icon_and_tooltip(self) -> None:
+        source_row = PANEL.split("component SourceRow: CursorSurface", 1)[1].split(
+            "component ReceiverButton", 1
+        )[0]
+        self.assertIn(r'iconText: "\uf08d"', source_row)
+        self.assertIn(
+            'tooltipText: sourceData.pinned ? "Unpin Input" : "Pin Input"',
+            source_row,
+        )
+        self.assertNotIn('text: sourceData.pinned ? "Pinned" : "Pin"', source_row)
+
     def test_every_stable_click_target_has_an_idle_border(self) -> None:
         stable = PANEL.split("component StableButton: Button", 1)[1]
         self.assertIn("bordered: true", stable)
