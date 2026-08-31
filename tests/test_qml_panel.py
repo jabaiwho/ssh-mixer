@@ -12,7 +12,7 @@ INDICATOR = (ROOT / "Indicator.qml").read_text(encoding="utf-8")
 class PanelRuntimeSafetyTest(unittest.TestCase):
     def test_button_visuals_do_not_change_with_pointer_position(self) -> None:
         self.assertIn("component StableButton: Button", PANEL)
-        self.assertIn("color: hasCursor ? Style.hoverFillFor", PANEL)
+        self.assertIn("color: hasCursor ? Util.alpha(root.keyboardCursorColor, 0.28)", PANEL)
         self.assertIn("component ActionButton: StableButton", PANEL)
         self.assertIn("component DestinationButton: StableButton", PANEL)
         self.assertIn("component RetentionButton: StableButton", PANEL)
@@ -69,13 +69,23 @@ class PanelRuntimeSafetyTest(unittest.TestCase):
         self.assertIn('if (/^[1-7]$/.test(t)) root.activateNumberedSection(Number(t))', PANEL)
 
     def test_keyboard_navigation_scrolls_sections_and_keeps_horizontal_motion_local(self) -> None:
+        self.assertIn('import "PanelNavigation.js" as PanelNavigation', PANEL)
+        self.assertIn('readonly property color keyboardCursorColor: "#FFD700"', PANEL)
+        self.assertIn("property var keyboardTarget: null", PANEL)
+        self.assertIn("function navigationItems()", PANEL)
+        self.assertIn("function selectFirstKeyboardTarget(section)", PANEL)
+        self.assertIn("PanelNavigation.nextIndex(", PANEL)
+        self.assertIn("keyboardTarget.keyboardActivate()", PANEL)
+        self.assertIn("property bool keyboardNavigable: true", PANEL)
+        self.assertIn("Border.flat(root.keyboardCursorColor", PANEL)
+        self.assertNotIn("hasCursor: false", PANEL)
         self.assertIn("function focusTarget()", PANEL)
         self.assertIn("function scheduleFocusScroll()", PANEL)
         self.assertIn("function scheduleSectionScroll(section)", PANEL)
         self.assertIn("function ensureSectionVisible(section)", PANEL)
         self.assertIn("PanelScroll.sectionTargetY(", PANEL)
         self.assertIn("root.ensureSectionVisible(section)", PANEL)
-        self.assertIn("focusColumn + dx", PANEL)
+        self.assertNotIn("focusColumn + dx", PANEL)
         self.assertNotIn("else switchView(dx)", PANEL)
 
     def test_desktop_all_disables_other_source_selection_without_disabling_pins(self) -> None:
@@ -96,7 +106,7 @@ class PanelRuntimeSafetyTest(unittest.TestCase):
         accordion = PANEL.split("component AccordionHeader: Button", 1)[1].split(
             "component SourceRow", 1
         )[0]
-        self.assertIn("borderSpec: Border.none()", accordion)
+        self.assertIn(": Border.none()", accordion)
         self.assertIn("expanded ? 0.10 : 0.035", accordion)
         self.assertIn("fontSize: Style.font.title", accordion)
         self.assertIn("width: parent.width - Style.space(12)", PANEL)

@@ -7,6 +7,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "PanelAlerts.js" as PanelAlerts
+import "PanelNavigation.js" as PanelNavigation
 import "PanelScroll.js" as PanelScroll
 import "PanelSession.js" as PanelSession
 
@@ -85,6 +86,7 @@ Item {
   property bool removalConfirmationUninstall: false
 
   property string focusSection: "sources"
+  property var keyboardTarget: null
   property int focusIndex: 0
   property int focusColumn: 0
   property bool cursorActive: false
@@ -94,6 +96,7 @@ Item {
   readonly property color foreground: Color.popups.text
   readonly property color dim: Color.muted
   readonly property color urgent: Color.urgent
+  readonly property color keyboardCursorColor: "#FFD700"
   readonly property bool activeSession: !!status.active || status.state === "streaming" || status.state === "local" || status.state === "starting"
   readonly property string prominentError: String(status.error || operationError || "")
   readonly property string statusText: {
@@ -173,6 +176,7 @@ Item {
     focusColumn = 0
     cursorActive = true
     scheduleSectionScroll(activeSection)
+    Qt.callLater(function() { root.selectFirstKeyboardTarget(root.activeSection) })
   }
 
   function activateNumberedSection(number) {
@@ -281,6 +285,7 @@ Item {
       configurationDirty = true
     }
     opened = true
+    keyboardTarget = null
     lastRevealedError = ""
     revealProminentError()
     cursorActive = false
@@ -948,6 +953,8 @@ Item {
   }
 
   function applySnapshot(data) {
+    var previousKeyboardKey = keyboardTarget
+      ? String(keyboardTarget.keyboardKey || "") : ""
     recentCaptureIds = []
     if (data.sourceChoices instanceof Array) sources = data.sourceChoices.slice()
     if (data.status) updateStatus(data.status)
@@ -989,6 +996,8 @@ Item {
     if (data.connectionOptions && data.connectionOptions.openSshProfiles instanceof Array)
       openSshProfiles = data.connectionOptions.openSshProfiles.slice()
     clampCursor()
+    if (previousKeyboardKey)
+      Qt.callLater(function() { root.restoreKeyboardTarget(previousKeyboardKey) })
     if (cursorActive && prominentError === "") scheduleFocusScroll()
   }
 
@@ -1373,46 +1382,86 @@ Item {
     }
   }
 
-  function sectionLength(section) {
-    if (section === "sources") return sourceActionIndex() + 1
-    if (section === "profiles") return Math.max(1, mixProfiles.length)
-    if (section === "receiver") return Math.max(1, connections.length)
-    return 1
+  function effectivelyNavigable(item) {
+    if (!item || item.keyboardNavigable !== true || item.width <= 0 || item.height <= 0)
+      return false
+    var current = item
+    while (current && current !== content) {
+      if (current.visible === false || current.enabled === false) return false
+      current = current.parent
+    }
+    return current === content
   }
 
-  function columnLength(section, row) {
-    if (section === "sources") {
-      if (row === 0 || row === sourceActionIndex()) return 3
-      return 2
+  function navigationItems() {
+    var result = []
+    function visit(parentItem) {
+      if (!parentItem || parentItem.children === undefined) return
+      var children = parentItem.children
+      for (var i = 0; i < children.length; i++) {
+        var child = children[i]
+        if (root.effectivelyNavigable(child)) {
+          var point = child.mapToItem(content, 0, 0)
+          result.push({
+            item: child,
+            x: point.x,
+            y: point.y,
+            width: child.width,
+            height: child.height
+          })
+        }
+        visit(child)
+      }
     }
-    return 1
+    visit(content)
+    return result
+  }
+
+  function sectionForItem(item) {
+    if (!item) return ""
+    var target = item.mapToItem(content, 0, item.height / 2)
+    var sections = sectionOrder()
+    var section = ""
+    for (var i = 0; i < sections.length; i++) {
+      var header = sectionHeaderItem(sections[i])
+      if (!header) continue
+      var point = header.mapToItem(content, 0, 0)
+      if (target.y >= point.y - 1) section = sections[i]
+    }
+    return section
+  }
+
+  function restoreKeyboardTarget(key) {
+    if (!key) return
+    var items = navigationItems()
+    for (var i = 0; i < items.length; i++) {
+      if (String(items[i].item.keyboardKey || "") === key) {
+        keyboardTarget = items[i].item
+        scheduleFocusScroll()
+        return
+      }
+    }
+  }
+
+  function selectFirstKeyboardTarget(section) {
+    var items = navigationItems()
+    var candidates = []
+    for (var i = 0; i < items.length; i++) {
+      if (sectionForItem(items[i].item) === section) candidates.push(items[i])
+    }
+    var index = PanelNavigation.firstIndex(candidates)
+    keyboardTarget = index >= 0 ? candidates[index].item : null
+    if (keyboardTarget) scheduleFocusScroll()
   }
 
   function clampCursor() {
-    var max = sectionLength(focusSection) - 1
-    if (focusIndex > max) focusIndex = max
-    if (focusIndex < 0) focusIndex = 0
-    focusColumn = Math.max(0, Math.min(columnLength(focusSection, focusIndex) - 1, focusColumn))
+    if (!effectivelyNavigable(keyboardTarget)) keyboardTarget = null
   }
 
   function focusTarget() {
-    if (focusSection === "sources") {
-      if (focusIndex === 0)
-        return [localDestination, receiverDestination, bothDestination][focusColumn]
-      if (pendingCaptureSource && focusIndex === 1)
-        return [confirmCaptureAction, cancelCaptureAction][focusColumn]
-      var sourceIndex = focusIndex - sourceFocusOffset()
-      if (sourceIndex >= 0 && sourceIndex < visibleSourceChoices().length)
-        return sourceRepeater.itemAt(sourceIndex) || sourcesHeader
-      return [endStreamAction, refreshAction, testAction][focusColumn]
-    }
-    if (focusSection === "profiles") return profileRepeater.itemAt(focusIndex) || profilesHeader
-    if (focusSection === "receiver") return receiverRepeater.itemAt(focusIndex) || receiverHeader
-    if (focusSection === "connection") return connectionHeader
-    if (focusSection === "privacy") return privacyHeader
-    if (focusSection === "diagnostics") return diagnosticsHeader
-    if (focusSection === "removal") return removalHeader
-    return null
+    if (effectivelyNavigable(keyboardTarget)) return keyboardTarget
+    if (focusSection === "sources") return sourcesHeader
+    return sectionHeaderItem(focusSection)
   }
 
   function scheduleFocusScroll() {
@@ -1426,51 +1475,27 @@ Item {
 
   function moveCursor(dx, dy) {
     cursorActive = true
-    var sections = sectionOrder()
-    var s = sections.indexOf(focusSection)
-    if (s < 0) {
-      focusSection = sections[0]
-      focusIndex = 0
-      focusColumn = 0
-      activeSection = focusSection
-      scheduleSectionScroll(focusSection)
-      return
-    }
-    if (dx !== 0) {
-      focusColumn = Math.max(0, Math.min(
-        columnLength(focusSection, focusIndex) - 1,
-        focusColumn + dx
-      ))
-      scheduleFocusScroll()
-      return
-    }
-    var sectionChanged = false
-    if (dy > 0) {
-      if (focusIndex < sectionLength(focusSection) - 1) {
-        focusIndex++
-        focusColumn = 0
-      } else if (s < sections.length - 1) {
-        focusSection = sections[s + 1]
-        focusIndex = 0
-        focusColumn = 0
-        activeSection = focusSection
-        sectionChanged = true
-      }
-    } else if (dy < 0) {
-      if (focusIndex > 0) {
-        focusIndex--
-        focusColumn = 0
-      } else if (s > 0) {
-        focusSection = sections[s - 1]
-        focusIndex = 0
-        focusColumn = 0
-        activeSection = focusSection
-        sectionChanged = true
+    var items = navigationItems()
+    var currentIndex = -1
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].item === keyboardTarget) {
+        currentIndex = i
+        break
       }
     }
-    clampCursor()
-    if (sectionChanged) scheduleSectionScroll(focusSection)
-    else scheduleFocusScroll()
+    if (currentIndex < 0) {
+      selectFirstKeyboardTarget(focusSection)
+      return
+    }
+    var nextIndex = PanelNavigation.nextIndex(items, currentIndex, dx, dy)
+    if (nextIndex < 0 || nextIndex === currentIndex) return
+    keyboardTarget = items[nextIndex].item
+    var nextSection = sectionForItem(keyboardTarget)
+    if (nextSection && nextSection !== focusSection) {
+      focusSection = nextSection
+      activeSection = nextSection
+    }
+    scheduleFocusScroll()
   }
 
   function tabSection(direction) {
@@ -1478,39 +1503,17 @@ Item {
     var sections = sectionOrder()
     var s = sections.indexOf(focusSection)
     if (s < 0) s = 0
-    focusSection = sections[(s + direction + sections.length) % sections.length]
-    focusIndex = 0
-    focusColumn = 0
-    activeSection = focusSection
-    scheduleSectionScroll(focusSection)
+    activateSection(sections[(s + direction + sections.length) % sections.length])
   }
 
   function activateCursor() {
     cursorActive = true
-    if (focusSection === "sources") {
-      var choices = visibleSourceChoices()
-      if (focusIndex === 0) {
-        chooseDestination(["local", "ssh", "both"][focusColumn])
-      } else if (pendingCaptureSource && focusIndex === 1) {
-        focusColumn === 0 ? confirmCaptureSource() : cancelCaptureSource()
-      } else {
-        var sourceIndex = focusIndex - sourceFocusOffset()
-        if (sourceIndex >= 0 && sourceIndex < choices.length) {
-          var source = choices[sourceIndex]
-          if (focusColumn === 0 && sourceSelectionEnabled(source)) toggleSource(source.id)
-          else if (focusColumn === 1) pinSource(source)
-        } else if (focusColumn === 0) endStream()
-        else if (focusColumn === 1) refresh()
-        else testConnection()
-      }
-    } else if (focusSection === "profiles" && mixProfiles.length > 0) {
-      var profile = mixProfiles[focusIndex]
-      profile.quickStartEnabled ? quickStartMixProfile(profile) : openMixProfile(profile)
-    } else if (focusSection === "receiver" && connections.length > 0) {
-      selectConnection(connections[focusIndex])
-    } else if (focusSection === "removal") {
-      confirmRemovalChoice(false)
+    if (!effectivelyNavigable(keyboardTarget)) {
+      selectFirstKeyboardTarget(focusSection)
+      return
     }
+    if (typeof keyboardTarget.keyboardActivate === "function")
+      keyboardTarget.keyboardActivate()
   }
 
   Timer {
@@ -2105,8 +2108,6 @@ Item {
                       id: confirmCaptureAction
                       label: "Confirm Capture & stream"
                       rowIndex: -1
-                      hasCursor: root.cursorActive && root.focusSection === "sources"
-                        && root.focusIndex === 1 && root.focusColumn === 0
                       onPressed: root.confirmCaptureSource()
                       Layout.fillWidth: true
                     }
@@ -2114,8 +2115,6 @@ Item {
                       id: cancelCaptureAction
                       label: "Cancel"
                       rowIndex: -1
-                      hasCursor: root.cursorActive && root.focusSection === "sources"
-                        && root.focusIndex === 1 && root.focusColumn === 1
                       onPressed: root.cancelCaptureSource()
                       Layout.fillWidth: true
                     }
@@ -2178,9 +2177,6 @@ Item {
                     label: "End Stream"
                     rowIndex: -1
                     enabled: root.activeSession || root.selectedIds.length > 0 || !!root.pendingSession
-                    hasCursor: root.cursorActive && root.focusSection === "sources"
-                      && root.focusIndex === root.sourceActionIndex()
-                      && root.focusColumn === 0
                     onPressed: root.endStream()
                     Layout.fillWidth: true
                   }
@@ -2188,9 +2184,6 @@ Item {
                     id: refreshAction
                     label: "Refresh"
                     rowIndex: -1
-                    hasCursor: root.cursorActive && root.focusSection === "sources"
-                      && root.focusIndex === root.sourceActionIndex()
-                      && root.focusColumn === 1
                     onPressed: root.refresh()
                     Layout.fillWidth: true
                   }
@@ -2198,9 +2191,6 @@ Item {
                     id: testAction
                     label: "Test Connection"
                     rowIndex: -1
-                    hasCursor: root.cursorActive && root.focusSection === "sources"
-                      && root.focusIndex === root.sourceActionIndex()
-                      && root.focusColumn === 2
                     onPressed: root.testConnection()
                     Layout.fillWidth: true
                   }
@@ -3292,15 +3282,22 @@ Item {
   }
 
   component AccordionHeader: Button {
+    id: accordion
     required property string sectionKey
     required property string label
+    property bool keyboardNavigable: true
+    property var keyboardActivate: function() { accordion.clicked() }
     readonly property bool expanded: root.sectionExpanded(sectionKey)
     width: content.width
     text: (expanded ? "▾  " : "▸  ") + label
     foreground: root.activeSection === sectionKey ? Color.accent : root.foreground
     background: Util.alpha(root.foreground, expanded ? 0.10 : 0.035)
-    color: hot ? Style.hoverFillFor(foreground, accent) : background
-    borderSpec: Border.none()
+    hasCursor: root.keyboardTarget === accordion
+    color: hasCursor ? Util.alpha(root.keyboardCursorColor, 0.28)
+      : hot ? Style.hoverFillFor(foreground, accent) : background
+    borderSpec: hasCursor
+      ? Border.flat(root.keyboardCursorColor, Math.max(2, Style.hoverBorderWidth))
+      : Border.none()
     fontFamily: root.fontFamily
     fontSize: Style.font.title
     horizontalPadding: Style.space(12)
@@ -3316,8 +3313,7 @@ Item {
     required property int rowIndex
     readonly property bool checked: root.sourceSelected(sourceData.id)
     readonly property bool selectionEnabled: root.sourceSelectionEnabled(sourceData)
-    hasCursor: root.cursorActive && root.focusSection === "sources"
-      && root.focusIndex === rowIndex + root.sourceFocusOffset()
+    hasCursor: root.keyboardTarget === sourceToggle || root.keyboardTarget === sourcePin
     current: checked
     foreground: root.foreground
     onHasCursorChanged: if (hasCursor) root.scheduleFocusScroll()
@@ -3370,19 +3366,25 @@ Item {
       }
 
       ToggleSwitch {
+        id: sourceToggle
+        property bool keyboardNavigable: true
+        property string keyboardKey: "source:" + String(sourceData.id) + ":toggle"
+        property var keyboardActivate: function() { root.toggleSource(sourceData.id) }
         checked: row.checked
         enabled: row.selectionEnabled
-        hasCursor: row.hasCursor && root.focusColumn === 0
-        foreground: root.foreground
+        hasCursor: root.keyboardTarget === sourceToggle
+        foreground: hasCursor ? root.keyboardCursorColor : root.foreground
+        accent: hasCursor ? root.keyboardCursorColor : Color.accent
         onToggled: root.toggleSource(sourceData.id)
       }
 
       StableButton {
+        id: sourcePin
+        keyboardKey: "source:" + String(sourceData.id) + ":pin"
         text: sourceData.pinned ? "Pinned" : "Pin"
         foreground: root.foreground
         fontFamily: root.fontFamily
         selected: sourceData.pinned === true
-        hasCursor: row.hasCursor && root.focusColumn === 1
         onClicked: root.pinSource(sourceData)
         Layout.preferredWidth: Style.space(78)
       }
@@ -3405,12 +3407,12 @@ Item {
   component ReceiverButton: StableButton {
     required property var receiverData
     required property int rowIndex
+    keyboardKey: "receiver:" + String(receiverData.connectionId || rowIndex)
     text: String(receiverData.receiverName || "Receiver") + (receiverData.selected ? "  ✓" : "")
     foreground: root.foreground
     fontFamily: root.fontFamily
     selected: receiverData.selected === true
     enabled: !root.activeSession || selected
-    hasCursor: root.cursorActive && root.focusSection === "receiver" && root.focusIndex === rowIndex
     onHasCursorChanged: if (hasCursor) root.scheduleFocusScroll()
     onClicked: root.selectConnection(receiverData)
   }
@@ -3418,10 +3420,10 @@ Item {
   component ProfileButton: StableButton {
     required property var profileData
     required property int rowIndex
+    keyboardKey: "profile:" + String(profileData.id || rowIndex)
     text: profileData.quickStartEnabled ? ("Quick Start · " + profileData.name) : ("Open · " + profileData.name)
     foreground: root.foreground
     fontFamily: root.fontFamily
-    hasCursor: root.cursorActive && root.focusSection === "profiles" && root.focusIndex === rowIndex
     onHasCursorChanged: if (hasCursor) root.scheduleFocusScroll()
     onClicked: profileData.quickStartEnabled
       ? root.quickStartMixProfile(profileData)
@@ -3436,13 +3438,11 @@ Item {
     foreground: root.foreground
     fontFamily: root.fontFamily
     selected: root.destination === value
-    hasCursor: root.cursorActive && root.focusSection === "sources"
-      && root.focusIndex === 0 && root.focusColumn === rowIndex
     onHasCursorChanged: if (hasCursor) root.scheduleFocusScroll()
     onClicked: root.chooseDestination(value)
   }
 
-  component PrivacyButton: Button {
+  component PrivacyButton: StableButton {
     required property string label
     required property string value
     text: label
@@ -3453,11 +3453,17 @@ Item {
   }
 
   component StableButton: Button {
+    id: stable
+    property bool keyboardNavigable: true
+    property string keyboardKey: ""
+    property var keyboardActivate: function() { stable.clicked() }
     bordered: true
-    color: hasCursor ? Style.hoverFillFor(foreground, accent)
+    hasCursor: root.keyboardTarget === stable
+    color: hasCursor ? Util.alpha(root.keyboardCursorColor, 0.28)
       : (selected || active) ? Style.selectedFillFor(foreground, accent)
       : background
-    borderSpec: hasCursor ? Border.controlSpec("hover-cursor", foreground, accent)
+    borderSpec: hasCursor
+      ? Border.flat(root.keyboardCursorColor, Math.max(2, Style.hoverBorderWidth))
       : selected && Border.controlHasWidth("selected") ? Border.controlSpec("selected", foreground, accent)
       : bordered ? Border.controlSpec("normal", foreground, accent)
       : Border.none()
@@ -3481,7 +3487,6 @@ Item {
     foreground: root.foreground
     fontFamily: root.fontFamily
     selected: false
-    hasCursor: false
     onHasCursorChanged: if (hasCursor) root.scheduleFocusScroll()
     onClicked: pressed()
   }
