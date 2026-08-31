@@ -1,5 +1,6 @@
 import QtQuick
 import QtTest
+import "../../PanelAlerts.js" as PanelAlerts
 import "../../PanelSession.js" as PanelSession
 
 TestCase {
@@ -51,6 +52,26 @@ TestCase {
     verify(PanelSession.requiresCaptureConfirmation(true, false))
     verify(!PanelSession.requiresCaptureConfirmation(true, true))
     verify(!PanelSession.requiresCaptureConfirmation(false, false))
+  }
+
+  function test_new_error_reveals_once_until_cleared() {
+    const first = PanelAlerts.revealDecision("", "replacement failed", true)
+    const unchanged = PanelAlerts.revealDecision(first.revealedError, "replacement failed", true)
+    const cleared = PanelAlerts.revealDecision(unchanged.revealedError, "", true)
+    const reopened = PanelAlerts.revealDecision("", "replacement failed", true)
+
+    verify(first.scrollTop)
+    compare(first.revealedError, "replacement failed")
+    verify(!unchanged.scrollTop)
+    compare(cleared.revealedError, "")
+    verify(reopened.scrollTop)
+  }
+
+  function test_error_does_not_scroll_a_closed_panel() {
+    const result = PanelAlerts.revealDecision("", "replacement failed", false)
+
+    verify(!result.scrollTop)
+    compare(result.revealedError, "replacement failed")
   }
 
   function test_numbered_sections_are_bounded() {

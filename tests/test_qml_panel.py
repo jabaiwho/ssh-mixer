@@ -51,6 +51,19 @@ class PanelRuntimeSafetyTest(unittest.TestCase):
         self.assertIn('proc.command = [backend, "configure", "--json", JSON.stringify(payload || {})]', PANEL)
         self.assertNotIn('label: root.activeSession ? "Stop" : "Start"', PANEL)
 
+    def test_errors_are_prominent_above_inputs_and_revealed_once(self) -> None:
+        self.assertIn('import "PanelAlerts.js" as PanelAlerts', PANEL)
+        self.assertIn("property string operationError: \"\"", PANEL)
+        self.assertIn("readonly property string prominentError:", PANEL)
+        self.assertIn("function revealProminentError()", PANEL)
+        self.assertIn("PanelAlerts.revealDecision(", PANEL)
+        self.assertIn("id: sessionErrorBanner", PANEL)
+        self.assertIn('text: "SSH-MIXER ERROR"', PANEL)
+        self.assertIn('text: "Press 6 for detailed, locally redacted diagnostics."', PANEL)
+        self.assertLess(PANEL.index("id: sessionErrorBanner"), PANEL.index("id: sourcesHeader"))
+        self.assertIn('visible: root.message !== "" && root.prominentError === ""', PANEL)
+        self.assertNotIn('text: root.status.error ? root.status.error : root.message', PANEL)
+
     def test_number_keys_jump_to_corresponding_sections(self) -> None:
         self.assertIn("function activateNumberedSection(number)", PANEL)
         self.assertIn('if (/^[1-7]$/.test(t)) root.activateNumberedSection(Number(t))', PANEL)
