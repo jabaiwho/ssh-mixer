@@ -64,6 +64,11 @@ class PanelRuntimeSafetyTest(unittest.TestCase):
         self.assertIn(
             "PanelSession.operationMatchesConfiguration(", PANEL
         )
+        self.assertIn("PanelSession.captureConfirmation(", PANEL)
+        self.assertIn("pendingSession = source.session", PANEL)
+        self.assertNotIn(
+            "if (source.restartSelection === true) requestSessionApply(true)", PANEL
+        )
 
     def test_errors_are_prominent_above_inputs_and_revealed_once(self) -> None:
         self.assertIn('import "PanelAlerts.js" as PanelAlerts', PANEL)

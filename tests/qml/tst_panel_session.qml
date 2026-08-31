@@ -60,6 +60,26 @@ TestCase {
     verify(PanelSession.operationMatchesConfiguration(5, 5))
   }
 
+  function test_capture_confirmation_owns_an_immutable_session_request() {
+    const desired = {
+      destination: "both",
+      sourceChoiceIds: ["capture:synthetic"],
+      startWhenStopped: true,
+      reuseConfiguredSelection: false,
+      configurationRevision: 7
+    }
+    const confirmation = PanelSession.captureConfirmation("Synthetic Capture", desired)
+    desired.destination = "ssh"
+    desired.sourceChoiceIds.push("stale")
+    desired.configurationRevision = 8
+
+    compare(confirmation.label, "Synthetic Capture")
+    verify(confirmation.restartSelection)
+    compare(confirmation.session.destination, "both")
+    compare(confirmation.session.sourceChoiceIds, ["capture:synthetic"])
+    compare(confirmation.session.configurationRevision, 7)
+  }
+
   function test_new_error_reveals_once_until_cleared() {
     const first = PanelAlerts.revealDecision("", "replacement failed", true)
     const unchanged = PanelAlerts.revealDecision(first.revealedError, "replacement failed", true)
