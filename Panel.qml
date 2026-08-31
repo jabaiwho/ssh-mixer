@@ -63,6 +63,8 @@ Item {
   property string setupPort: "22"
   property var pendingTrust: null
   property bool configurationDirty: false
+  property int configurationRevision: 0
+  property int actionConfigurationRevision: -1
   property var pendingSession: null
   property var pendingCaptureSource: null
   property string message: ""
@@ -270,20 +272,29 @@ Item {
       flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height, bottom - flick.height + Style.space(8)))
   }
 
+  function markConfigurationDirty() {
+    configurationDirty = true
+    configurationRevision++
+  }
+
+  function clearConfigurationDirty() {
+    configurationDirty = false
+  }
+
   function open(payloadJson) {
     var payload = {}
     try { payload = JSON.parse(payloadJson || "{}") || {} } catch (e) {}
-    configurationDirty = false
+    clearConfigurationDirty()
     if (payload.destination !== undefined) {
       destination = normalizeDestination(payload.destination)
-      configurationDirty = true
+      markConfigurationDirty()
     }
     if (payload.sourceChoiceIds instanceof Array) {
       selectedIds = payload.sourceChoiceIds.slice()
-      configurationDirty = true
+      markConfigurationDirty()
     } else if (payload.sourceIds instanceof Array) {
       selectedIds = payload.sourceIds.slice()
-      configurationDirty = true
+      markConfigurationDirty()
     }
     opened = true
     keyboardTarget = null
@@ -353,7 +364,7 @@ Item {
     else if (list.indexOf(id) < 0) list.push(id)
     pendingCaptureSource = null
     selectedIds = list
-    configurationDirty = true
+    markConfigurationDirty()
     requestSessionApply(captureConfirmed === true, true)
   }
 
@@ -373,7 +384,7 @@ Item {
       list.splice(pos, 1)
       pendingCaptureSource = null
       selectedIds = list
-      configurationDirty = true
+      markConfigurationDirty()
       requestSessionApply(false, true)
       return
     }
@@ -399,7 +410,7 @@ Item {
     pendingCaptureSource = null
     message = "Capture Input was not selected."
     if (restore) {
-      configurationDirty = false
+      clearConfigurationDirty()
       refresh()
     }
   }
@@ -423,7 +434,7 @@ Item {
       var reuseConfiguredSelection = !configurationDirty
         && status.captureActive !== true
       destination = next
-      configurationDirty = true
+      markConfigurationDirty()
       requestSessionApply(false, activeSession, reuseConfiguredSelection)
     }
   }
@@ -446,7 +457,8 @@ Item {
       destination: destination,
       sourceChoiceIds: selectedIds.slice(),
       startWhenStopped: startWhenStopped !== false,
-      reuseConfiguredSelection: reuseConfiguredSelection === true
+      reuseConfiguredSelection: reuseConfiguredSelection === true,
+      configurationRevision: configurationRevision
     }
     message = selectedIds.length > 0
       ? "Applying Inputs to " + destination.toUpperCase() + "…"
@@ -457,6 +469,7 @@ Item {
   function applyPendingSession() {
     if (!pendingSession || busy) return
     var desired = pendingSession
+    actionConfigurationRevision = desired.configurationRevision
     var command = PanelSession.nextCommand(
       activeSession,
       desired.sourceChoiceIds,
@@ -757,7 +770,7 @@ Item {
   function endStream() {
     pendingCaptureSource = null
     selectedIds = []
-    configurationDirty = true
+    markConfigurationDirty()
     requestSessionApply(false, true)
   }
 
@@ -1049,7 +1062,9 @@ Item {
     if (action === "start") {
       applyStatus(data)
       if (data.ok) {
-        configurationDirty = false
+        if (PanelSession.operationMatchesConfiguration(
+            actionConfigurationRevision, configurationRevision))
+          clearConfigurationDirty()
         message = statusText + (selectedLabels() ? ": " + selectedLabels() : "")
       } else {
         message = data.error || procErr || "Could not start selected Inputs"
@@ -1064,7 +1079,9 @@ Item {
     }
     if (action === "selectionSave") {
       if (data.ok) {
-        configurationDirty = false
+        if (PanelSession.operationMatchesConfiguration(
+            actionConfigurationRevision, configurationRevision))
+          clearConfigurationDirty()
         message = selectedIds.length > 0
           ? "Route Mode saved. Selected Inputs remain stopped."
           : "No Inputs selected. Stream ended."
@@ -1103,6 +1120,7 @@ Item {
           destination = normalizeDestination(data.migration.config.destination)
           selectedIds = []
         }
+        clearConfigurationDirty()
         message = "Legacy migration verified; backup retired and obsolete command/source-id state removed."
       } else if (data.migration && data.migration.deferred) {
         message = "Migration is waiting. Stop the active Session explicitly, then retry; it was not interrupted."
@@ -1175,7 +1193,7 @@ Item {
       if (data.config) {
         destination = normalizeDestination(data.config.destination)
         selectedIds = []
-        configurationDirty = false
+        clearConfigurationDirty()
         if (data.config.remote) remote = data.config.remote
         if (data.config.connection) connection = data.config.connection
       }

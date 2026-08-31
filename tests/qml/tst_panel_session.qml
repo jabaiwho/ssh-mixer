@@ -55,6 +55,11 @@ TestCase {
     verify(!PanelSession.requiresCaptureConfirmation(false, false))
   }
 
+  function test_stale_start_completion_cannot_clear_a_newer_route_revision() {
+    verify(!PanelSession.operationMatchesConfiguration(4, 5))
+    verify(PanelSession.operationMatchesConfiguration(5, 5))
+  }
+
   function test_new_error_reveals_once_until_cleared() {
     const first = PanelAlerts.revealDecision("", "replacement failed", true)
     const unchanged = PanelAlerts.revealDecision(first.revealedError, "replacement failed", true)

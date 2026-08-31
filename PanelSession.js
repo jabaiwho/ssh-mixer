@@ -10,6 +10,10 @@ function nextCommand(activeSession, sourceChoiceIds, destination, startWhenStopp
   return { action: "selectionSave", payload: payload }
 }
 
+function operationMatchesConfiguration(operationRevision, currentRevision) {
+  return Number(operationRevision) === Number(currentRevision)
+}
+
 function requiresCaptureConfirmation(hasCapture, captureConfirmed) {
   return hasCapture === true && captureConfirmed !== true
 }
