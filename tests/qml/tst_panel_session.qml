@@ -20,12 +20,22 @@ TestCase {
     compare(command.payload.sourceChoiceIds, ["chromium", "spotify"])
   }
 
+  function test_active_route_change_reuses_persisted_matchers() {
+    const stopping = PanelSession.nextCommand(true, ["stale-choice"], "both", true, true)
+    const restarting = PanelSession.nextCommand(false, ["stale-choice"], "both", true, true)
+
+    compare(stopping.action, "stop")
+    compare(restarting.action, "start")
+    compare(restarting.payload.destination, "both")
+    verify(!restarting.payload.hasOwnProperty("sourceChoiceIds"))
+  }
+
   function test_stopped_route_change_saves_without_starting_selected_inputs() {
-    const command = PanelSession.nextCommand(false, ["chromium"], "local", false)
+    const command = PanelSession.nextCommand(false, ["stale-choice"], "local", false, true)
 
     compare(command.action, "selectionSave")
     compare(command.payload.destination, "local")
-    compare(command.payload.sourceChoiceIds, ["chromium"])
+    verify(!command.payload.hasOwnProperty("sourceChoiceIds"))
   }
 
   function test_final_deselection_stops_then_saves_empty_selection() {
