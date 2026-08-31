@@ -3383,12 +3383,13 @@ Item {
       StableButton {
         id: sourcePin
         keyboardKey: "source:" + String(sourceData.id) + ":pin"
-        text: sourceData.pinned ? "Pinned" : "Pin"
+        iconText: "\uf08d"
+        tooltipText: sourceData.pinned ? "Unpin Input" : "Pin Input"
         foreground: root.foreground
         fontFamily: root.fontFamily
         selected: sourceData.pinned === true
         onClicked: root.pinSource(sourceData)
-        Layout.preferredWidth: Style.space(78)
+        Layout.preferredWidth: Style.space(44)
       }
     }
 

@@ -49,7 +49,7 @@ On first run:
 4. For a Tailscale or Direct SSH Connection, plan and approve the correct platform's Companion Setup to obtain a receiver-only Managed Identity.
 5. At the top of **1. Inputs**, choose where audio will play—This PC, Receiver, or Both.
 6. Optionally run the bounded Receiver test.
-7. Choose a Playback Input to start immediately. Capture Inputs are microphones or other direct inputs and require the displayed confirmation before starting. **Desktop (All)** replaces every other selection; deselect it before choosing individual applications or inputs. Pin important Sources that should stay visible while inactive.
+7. Choose a Playback Input to start immediately. Capture Inputs are microphones or other direct inputs and require the displayed confirmation before starting. **Desktop (All)** replaces every other selection; deselect it before choosing individual applications or inputs. Use the thumbtack icon to pin important Sources that should stay visible while inactive; its selected styling means the Input is pinned, and its tooltip identifies Pin/Unpin.
 8. Confirm the persistent bar indicator appears for the entire active Session. Turning off the final Input or choosing **End Stream** ends and cleans it.
 
 ## Choose a Connection
