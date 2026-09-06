@@ -36,6 +36,8 @@ from .config import (
     trust_dir,
 )
 from .connections import (
+    TrustStore,
+    connection_id,
     discover_tailscale_peers,
     normalize_connection,
     verify_tailscale_peer,
@@ -445,6 +447,7 @@ def resolve_remote(remote: dict[str, Any]) -> dict[str, Any]:
                     connection,
                     discover_tailscale_peers(),
                 )
+                connection = normalize_connection(verified)
                 host = str(verified["address"])
             elif connection["type"] == "openssh-profile":
                 inspected = inspect_profile(str(connection["profile"]))
@@ -482,7 +485,9 @@ def resolve_remote(remote: dict[str, Any]) -> dict[str, Any]:
         if not Path(key_path).is_file():
             raise SessionError(f"SSH key is not readable: {key_path}")
     resolved["host"] = host
-    resolved["hostKeyAlias"] = str(connection["host"])
+    resolved["hostKeyAlias"] = (
+        connection_id(connection) if connection["type"] == "tailscale" else str(connection["host"])
+    )
     resolved["user"] = user
     resolved["port"] = int(connection["port"])
     resolved["connection"] = connection
@@ -543,6 +548,8 @@ def ssh_base_command(remote: dict[str, Any]) -> list[str]:
         ]
 
     known_hosts = trust_dir() / "known_hosts"
+    if connection["type"] == "tailscale":
+        known_hosts = TrustStore(trust_dir()).prepare_known_hosts()
     target_host = f"[{resolved['host']}]" if ":" in resolved["host"] else resolved["host"]
     return [
         "ssh",
@@ -1174,7 +1181,7 @@ def start_session(config: dict[str, Any]) -> dict[str, Any]:
             )
             config["sourceIds"] = resolution["sourceIds"]
             config["sourceMatchers"] = resolution["sourceMatchers"]
-        save_config(config)
+        config = save_config(config)
         session_id = uuid.uuid4().hex
         config_read_fd, config_write_fd = os.pipe()
         command = [

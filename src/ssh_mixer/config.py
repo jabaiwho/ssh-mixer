@@ -200,16 +200,61 @@ def load_config() -> dict[str, Any]:
     return normalize_config(deep_merge(DEFAULT_CONFIG, loaded))
 
 
-def save_config(config: dict[str, Any]) -> None:
+def _refresh_selected_tailscale_connection(config: dict[str, Any]) -> dict[str, Any]:
+    from .connections import (
+        ConnectionError,
+        connection_id,
+        discover_tailscale_peers,
+        normalize_connection,
+        verify_tailscale_peer,
+    )
+
+    connection = config.get("connection")
+    if not isinstance(connection, dict) or connection["type"] != "tailscale":
+        return config
+    peers = discover_tailscale_peers()
+    peer = next((item for item in peers if item["id"] == connection["peerId"]), None)
+    if peer is None or peer["host"] == connection["host"]:
+        return config
+    try:
+        verified = verify_tailscale_peer(connection, peers)
+    except ConnectionError:
+        # Offline or invalid peers must not prevent saving unrelated settings.
+        # The transport repeats verification and reports the failure before SSH.
+        return config
+    item_id = connection_id(connection)
+
+    def refresh(saved: dict[str, Any]) -> dict[str, Any]:
+        if connection_id(saved) != item_id:
+            return saved
+        return normalize_connection({**saved, "host": verified["host"]})
+
+    return normalize_config(
+        {
+            **config,
+            "connection": refresh(connection),
+            "connections": [refresh(saved) for saved in config["connections"]],
+            "mixProfiles": [
+                {**profile, "connection": refresh(profile["connection"])}
+                for profile in config["mixProfiles"]
+            ],
+        }
+    )
+
+
+def save_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Persist settings and return them with the selected peer's current name."""
+
     ensure_dirs()
-    normalized = normalize_config(config)
+    normalized = _refresh_selected_tailscale_connection(normalize_config(config))
     # Concrete PulseAudio/PipeWire ids are runtime-only. Persist only stable
     # Source Matchers so numeric-id reuse cannot select unrelated audio.
-    normalized.pop("sourceIds", None)
+    persisted = {key: value for key, value in normalized.items() if key != "sourceIds"}
     secure_write_text(
         config_path(),
-        json.dumps(normalized, indent=2, sort_keys=True) + "\n",
+        json.dumps(persisted, indent=2, sort_keys=True) + "\n",
     )
+    return normalized
 
 
 def expand_user_path(value: str) -> str:
@@ -366,7 +411,12 @@ def config_from_payload(payload: dict[str, Any], base: dict[str, Any] | None = N
     if remote_payload:
         incoming["remote"] = remote_payload
 
-    return normalize_config(deep_merge(base_config, incoming))
+    merged = deep_merge(base_config, incoming)
+    if "connection" in incoming:
+        # A Connection is one identity, not a partial settings patch. Replacing
+        # it must not inherit another Receiver's trust anchor or Managed Identity.
+        merged["connection"] = incoming["connection"]
+    return normalize_config(merged)
 
 
 def public_config(config: dict[str, Any]) -> dict[str, Any]:

@@ -102,6 +102,13 @@ def normalize_connection(value: dict[str, Any]) -> dict[str, Any]:
         "port": port,
         "peerId": peer_id if connection_type == "tailscale" else "",
     }
+    if connection_type == "tailscale":
+        # Preserve the original Connection ID and approved SSH alias when the
+        # peer's current DNS name changes. Older configurations need no migration.
+        identity_host = str(value.get("identityHost", host)).strip().rstrip(".")
+        if not _valid_host(identity_host):
+            raise ConnectionError("Tailscale identity host is invalid")
+        normalized["identityHost"] = identity_host
     if connection_type in {"tailscale", "direct"}:
         security_level = str(value.get("securityLevel", ""))
         managed_identity_id = str(value.get("managedIdentityId", ""))
@@ -290,8 +297,9 @@ def verify_tailscale_peer(
     )
     if not peer or not peer.get("online"):
         raise ConnectionError("selected Tailscale peer is not online")
-    if str(peer.get("host", "")).rstrip(".") != normalized["host"]:
-        raise ConnectionError("selected Tailscale peer identity changed")
+    # The peer ID identifies the Receiver; its hostname is mutable metadata.
+    # Keep identityHost pinned so following a rename cannot grant new SSH trust.
+    normalized = normalize_connection({**normalized, "host": peer.get("host", "")})
     advertised = {
         str(ipaddress.ip_address(str(address))) for address in peer.get("addresses", [])
     }
@@ -335,15 +343,16 @@ def scan_host_keys(connection: dict[str, Any], *, address: str | None = None) ->
 
 def connection_id(connection: dict[str, Any]) -> str:
     normalized = normalize_connection(connection)
+    identity = {**normalized, "host": normalized.get("identityHost", normalized["host"])}
     value = "\0".join(
-        str(normalized.get(key, ""))
+        str(identity.get(key, ""))
         for key in ("type", "profile", "peerId", "host", "port", "user")
     )
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def _host_token(connection: dict[str, Any]) -> str:
-    host = str(connection["host"])
+    host = str(connection.get("identityHost", connection["host"]))
     port = int(connection["port"])
     return host if port == 22 else f"[{host}]:{port}"
 
@@ -444,6 +453,12 @@ class TrustStore:
         )
         self._rebuild_known_hosts()
         return self.inspect(normalized, candidate_lines)
+
+    def prepare_known_hosts(self) -> Path:
+        """Render approved aliases, including for older hostname-only stores."""
+
+        self._rebuild_known_hosts()
+        return self.known_hosts_path
 
     def has_record(self, connection: dict[str, Any]) -> bool:
         path = self._record_path(normalize_connection(connection))
