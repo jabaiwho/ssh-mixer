@@ -6,7 +6,7 @@ SSH-mixer publishes the Omarchy plugin as reviewed source and Receiver helpers a
 
 | Version | Supported |
 | --- | --- |
-| Plugin `0.1.1` | Yes |
+| Plugin `0.1.2` | Yes |
 | Receiver/Companion `1.1.2` | Yes |
 | Protected default branch | Development |
 | Older releases, commits, and personal forks | No |
