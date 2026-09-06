@@ -244,7 +244,7 @@ class MixerApplication:
                     sources, normalized_ids
                 )
             config = config_from_payload(configured_payload)
-            save_config(config)
+            config = save_config(config)
             return {
                 "ok": True,
                 "schemaVersion": 1,
@@ -1209,7 +1209,8 @@ class MixerApplication:
                 str(payload.get("connectionId", "")),
             )
             config["connection"] = connection
-            save_config(config)
+            config = save_config(config)
+            connection = config["connection"]
             return {
                 "ok": True,
                 "schemaVersion": 1,
@@ -1282,11 +1283,11 @@ class MixerApplication:
                     code="trust-required",
                 )
             config = config_from_payload({"connection": connection})
-            save_config(config)
+            config = save_config(config)
             return {
                 "ok": True,
                 "schemaVersion": 1,
-                "connection": connection,
+                "connection": config["connection"],
                 "config": public_config(config),
             }
         if operation == "trust.inspect":

@@ -62,6 +62,8 @@ SSH-mixer reads `tailscale status --json`, records the selected peer identity, a
 
 Use this when both machines already belong to a trusted tailnet. Choosing Tailscale does not remove the need to review the Receiver host-key fingerprint.
 
+Automatic rename handling applies to every Tailscale Connection, including existing saved entries and Connections created later; no receiver-specific setup or opt-in is needed. If the same device changes its hostname or MagicDNS name, SSH-mixer follows its stable Tailscale peer ID automatically. Selecting, testing, or saving the Connection refreshes its address and matching saved Connections/Mix Profiles while preserving your Receiver nickname, existing Managed Identity, and approved SSH keys. The current name must still resolve to that online peer's advertised address. A missing/replaced peer or changed SSH key remains blocked; there is no fallback to another device and no automatic audio start. Direct SSH and OpenSSH Profile Connections retain their existing explicit address/profile policies.
+
 ### Direct SSH Connection
 
 Enter a host, user, and port explicitly. Direct Connections use `-F /dev/null` and safety overrides, so user OpenSSH configuration, forwarding, local commands, agents, X11, and TTY behavior are not silently inherited.

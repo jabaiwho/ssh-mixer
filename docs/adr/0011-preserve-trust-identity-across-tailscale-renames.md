@@ -1,0 +1,5 @@
+# Preserve trust identity across Tailscale renames
+
+A Tailscale peer ID identifies the Receiver while its hostname may change. Follow the same online peer's current DNS name only when it resolves to an advertised address; retain the original hostname as validated `identityHost` metadata for Connection IDs, defaulting to the saved hostname for older configurations, and use that stable Connection ID as the SSH trust alias. Render aliases only from approved Trust Records so another peer reusing an old hostname cannot share accepted keys. This preserves existing Trust Records, Managed Identities, and Pending Cleanup references instead of migrating every identity or approving new keys, while ordinary settings saves refresh the selected Connection and its matching saved entries/Mix Profiles without starting audio.
+
+Direct SSH and OpenSSH Profile Connections keep their existing policies because they do not provide a Tailscale peer identity. A missing/replaced peer or unknown/changed SSH key still requires explicit resolution; neither names nor trust are guessed.

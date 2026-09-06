@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import tempfile
@@ -738,14 +739,12 @@ class SessionSecurityTest(unittest.TestCase):
             "ssh_mixer.session.normalize_status", side_effect=[stopped, streaming]
         ), patch("ssh_mixer.session.time.sleep"), patch(
             "ssh_mixer.session.uuid.uuid4", return_value=SimpleNamespace(hex="fixed-session")
-        ), patch("ssh_mixer.session.subprocess.Popen", side_effect=launch_worker), patch(
-            "ssh_mixer.session.save_config"
-        ) as save_config:
+        ), patch("ssh_mixer.session.subprocess.Popen", side_effect=launch_worker):
             result = start_session(config)
 
-        for fd in inherited_fds:
-            os.close(fd)
-        saved = save_config.call_args.args[0]
+        self.assertEqual(len(inherited_fds), 1)
+        with os.fdopen(inherited_fds[0], "r", encoding="utf-8") as handoff:
+            saved = json.load(handoff)
         self.assertEqual(result["sessionId"], "fixed-session")
         self.assertEqual(saved["sourceIds"], ["sink-input:301"])
         self.assertEqual(saved["sourceMatchers"], [active_matcher, inactive_matcher])

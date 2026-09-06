@@ -103,7 +103,7 @@ def test_connection_command(args: argparse.Namespace) -> int:
     require_migration_complete()
     payload = read_payload(args)
     config = config_from_payload(payload)
-    save_config(config)
+    config = save_config(config)
     result = test_connection(config.get("remote", {}))
     emit({"ok": result["ok"], "connection": result, "config": public_config(config)})
     return 0 if result["ok"] else 1
