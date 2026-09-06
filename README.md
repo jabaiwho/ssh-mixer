@@ -10,16 +10,16 @@ The guided first-run, Connection, host-trust, identity, setup, privacy, diagnost
 
 ## Install
 
-SSH-mixer `v0.1.0` is distributed as reviewed source at one signed Git tag. Receiver `v1.1.0` is a separate [signed, attested, immutable production release](https://github.com/jabaiwho/ssh-mixer/releases/tag/receiver-v1.1.0), and its metadata trust root is pinned in `release/allowed_signers`. Omarchy plugins remain unsandboxed source, so review and pin the exact tag rather than enabling a moving branch.
+SSH-mixer `v0.1.1` is distributed as reviewed source at one signed Git tag. Receiver `v1.1.2` is a separate [signed, attested, immutable production release](https://github.com/jabaiwho/ssh-mixer/releases/tag/receiver-v1.1.2), and its metadata trust root is pinned in `release/allowed_signers`. Omarchy plugins remain unsandboxed source, so review and pin the exact tag rather than enabling a moving branch.
 
-Current `main` contains unreleased plugin 0.1.1 and Companion/Receiver 1.1.2 source. Do not treat source version declarations as signed release availability; follow the [live readiness record](docs/release-readiness-v0.1.1-receiver-v1.1.2.md) until the new tags and immutable Receiver release are independently verified.
+Current `main` prepares plugin 0.1.2 with [automatic Tailscale rename handling](docs/release-notes-v0.1.2.md). Publication and verification are tracked in [#48](https://github.com/jabaiwho/ssh-mixer/issues/48); source version declarations alone do not establish signed release availability. Companion/Receiver 1.1.2 remains unchanged.
 
 ```bash
-git clone --branch v0.1.0 --depth 1 \
+git clone --branch v0.1.1 --depth 1 \
   https://github.com/jabaiwho/ssh-mixer \
   ~/.config/omarchy/plugins/jabaiwho.ssh-mixer
 cd ~/.config/omarchy/plugins/jabaiwho.ssh-mixer
-test "$(git rev-parse HEAD)" = "917f812bf2c5b4a63de6b5c59f43b904600858d9"
+test "$(git rev-parse HEAD)" = "346b4d6248c8ba4de07959e0d8345f720528c81b"
 omarchy plugin validate ~/.config/omarchy/plugins/jabaiwho.ssh-mixer
 omarchy plugin enable jabaiwho.ssh-mixer
 ln -sf ~/.config/omarchy/plugins/jabaiwho.ssh-mixer/bin/ssh-mixer ~/.local/bin/ssh-mixer
@@ -167,7 +167,7 @@ Receiver commands are not configurable shell text. Streaming, capability checks,
 
 ## Verified Receiver updates
 
-SSH-mixer versions the plugin (`0.1.1`), each platform's Companion Setup (`1.1.2`), each Receiver helper (`1.1.2`), and Receiver Protocol (`1`) independently. A compatible installed helper continues working; a newer compatible helper is optional, while an incompatible protocol fails with guidance rather than silently replacing anything.
+SSH-mixer versions the plugin (`0.1.2`), each platform's Companion Setup (`1.1.2`), each Receiver helper (`1.1.2`), and Receiver Protocol (`1`) independently. A compatible installed helper continues working; a newer compatible helper is optional, while an incompatible protocol fails with guidance rather than silently replacing anything.
 
 An update plan is accepted only from detached OpenSSH-signed release metadata using the `ssh-mixer-release` namespace and an explicitly reviewed `release/allowed_signers` trust root. The signed metadata binds a full source commit, immutable versioned GitHub release URLs, artifact sizes, SHA-256 checksums, protocol ranges, and the exact changes shown for approval. Metadata signatures are checked again immediately before download, and each downloaded artifact is staged privately and checked before an installer can run.
 
