@@ -14,16 +14,16 @@ The source desktop is Omarchy Linux with PipeWire/PulseAudio compatibility. Tail
 
 ## Install and first run
 
-Plugin `v0.1.1` is reviewed source at one signed Git tag. Receiver `v1.1.2` is a separate [signed, attested, immutable production release](https://github.com/jabaiwho/ssh-mixer/releases/tag/receiver-v1.1.2), and the source pins its production metadata trust root. The plugin remains unsandboxed source rather than a binary package; review [SECURITY.md](../SECURITY.md) and pin the exact tag before enabling it.
+Plugin [`v0.1.2`](https://github.com/jabaiwho/ssh-mixer/releases/tag/v0.1.2) is reviewed source at one signed Git tag. Receiver `v1.1.2` is a separate [signed, attested, immutable production release](https://github.com/jabaiwho/ssh-mixer/releases/tag/receiver-v1.1.2), and the source pins its production metadata trust root. The plugin remains unsandboxed source rather than a binary package; review [SECURITY.md](../SECURITY.md) and pin the exact tag before enabling it.
 
-Current `main` prepares plugin 0.1.2 with [automatic Tailscale rename handling](release-notes-v0.1.2.md). Follow [#48](https://github.com/jabaiwho/ssh-mixer/issues/48) for publication and verification; the installation instructions below remain on the existing signed tag until the new tag is available. Companion/Receiver 1.1.2 remains unchanged.
+Plugin 0.1.2 includes [automatic Tailscale rename handling](release-notes-v0.1.2.md) for existing and future Connections. Its published tag signature and source archives were independently verified; [#48](https://github.com/jabaiwho/ssh-mixer/issues/48) records the evidence. Companion/Receiver 1.1.2 remains unchanged. Pin the signed release below rather than the development branch.
 
 ```bash
-git clone --branch v0.1.1 --depth 1 \
+git clone --branch v0.1.2 --depth 1 \
   https://github.com/jabaiwho/ssh-mixer \
   ~/.config/omarchy/plugins/jabaiwho.ssh-mixer
 cd ~/.config/omarchy/plugins/jabaiwho.ssh-mixer
-test "$(git rev-parse HEAD)" = "346b4d6248c8ba4de07959e0d8345f720528c81b"
+test "$(git rev-parse HEAD)" = "eaa8a2528c080308e50536195f2c71f2506f6ebe"
 omarchy plugin validate ~/.config/omarchy/plugins/jabaiwho.ssh-mixer
 omarchy plugin enable jabaiwho.ssh-mixer
 ln -sf ~/.config/omarchy/plugins/jabaiwho.ssh-mixer/bin/ssh-mixer ~/.local/bin/ssh-mixer
