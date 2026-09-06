@@ -14,16 +14,16 @@ The source desktop is Omarchy Linux with PipeWire/PulseAudio compatibility. Tail
 
 ## Install and first run
 
-Plugin `v0.1.0` is reviewed source at one signed Git tag. Receiver `v1.1.0` is a separate [signed, attested, immutable production release](https://github.com/jabaiwho/ssh-mixer/releases/tag/receiver-v1.1.0), and the source pins its production metadata trust root. The plugin remains unsandboxed source rather than a binary package; review [SECURITY.md](../SECURITY.md) and pin the exact tag before enabling it.
+Plugin `v0.1.1` is reviewed source at one signed Git tag. Receiver `v1.1.2` is a separate [signed, attested, immutable production release](https://github.com/jabaiwho/ssh-mixer/releases/tag/receiver-v1.1.2), and the source pins its production metadata trust root. The plugin remains unsandboxed source rather than a binary package; review [SECURITY.md](../SECURITY.md) and pin the exact tag before enabling it.
 
-Current `main` contains unreleased plugin 0.1.1 and Companion/Receiver 1.1.2 source. Continue using the signed versions below until the [0.1.1/1.1.2 readiness record](release-readiness-v0.1.1-receiver-v1.1.2.md) is complete and the new release is independently verified.
+Current `main` prepares plugin 0.1.2 with [automatic Tailscale rename handling](release-notes-v0.1.2.md). Follow [#48](https://github.com/jabaiwho/ssh-mixer/issues/48) for publication and verification; the installation instructions below remain on the existing signed tag until the new tag is available. Companion/Receiver 1.1.2 remains unchanged.
 
 ```bash
-git clone --branch v0.1.0 --depth 1 \
+git clone --branch v0.1.1 --depth 1 \
   https://github.com/jabaiwho/ssh-mixer \
   ~/.config/omarchy/plugins/jabaiwho.ssh-mixer
 cd ~/.config/omarchy/plugins/jabaiwho.ssh-mixer
-test "$(git rev-parse HEAD)" = "917f812bf2c5b4a63de6b5c59f43b904600858d9"
+test "$(git rev-parse HEAD)" = "346b4d6248c8ba4de07959e0d8345f720528c81b"
 omarchy plugin validate ~/.config/omarchy/plugins/jabaiwho.ssh-mixer
 omarchy plugin enable jabaiwho.ssh-mixer
 ln -sf ~/.config/omarchy/plugins/jabaiwho.ssh-mixer/bin/ssh-mixer ~/.local/bin/ssh-mixer
@@ -154,7 +154,7 @@ Use **Clear diagnostics** to delete retained events immediately. **Contribute a 
 
 ## Updates
 
-Creating an update plan never installs anything. This source pins Receiver release `1.1.1`; a missing, unpublished, changed, invalid, or incompatible signed immutable release fails closed before installation. Plugin 0.1.1 applies the 10 ms source cadence and bounded Stream Epochs with an older compatible Protocol-v1 helper, while external-clock correction within each epoch requires Receiver 1.1.1. Receiver 1.1.0 is not silently replaced, and its separately approved update adds continuous correction rather than enabling the epoch policy.
+Creating an update plan never installs anything. This source pins Receiver release `1.1.2`; a missing, unpublished, changed, invalid, or incompatible signed immutable release fails closed before installation. Plugin 0.1.1 applies the 10 ms source cadence and bounded Stream Epochs with an older compatible Protocol-v1 helper, while external-clock correction within each epoch requires Receiver 1.1.1. Receiver 1.1.0 is not silently replaced, and its separately approved update adds continuous correction rather than enabling the epoch policy.
 
 When configured, **Check signed Receiver update** verifies the plugin-pinned metadata signature, checks current Receiver capabilities, and displays exact component, native-authentication, privilege, and rollback changes. The Managed Identity cannot update executable code. After unchanged plan-hash approval, SSH-mixer uses native OpenSSH authentication, verifies immutable URL scope, byte size, and SHA-256, retains protected Receiver backups, runs the signed Companion Setup, verifies platform, helper version, protocol compatibility, restrictions, and non-elevated runtime, then commits. Failure restores the prior helper and exact authorized-key file and reports incomplete rollback honestly. Private source staging is also verified removed.
 

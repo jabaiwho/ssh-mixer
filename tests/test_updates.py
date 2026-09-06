@@ -100,12 +100,13 @@ class VersionRepresentationTest(unittest.TestCase):
             artifact_count = len(list(artifacts.glob("*")))
 
         self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(built["pluginVersion"], PLUGIN_VERSION)
         self.assertEqual(len(built["artifacts"]), 6)
         self.assertTrue(all("/releases/download/receiver-v1.0.0/" in item["url"] for item in built["artifacts"]))
         self.assertEqual(artifact_count, 6)
 
     def test_plugin_companion_receiver_and_protocol_versions_are_independent(self) -> None:
-        self.assertEqual(PLUGIN_VERSION, "0.1.1")
+        self.assertEqual(PLUGIN_VERSION, "0.1.2")
         self.assertEqual(PROTOCOL_VERSION, 1)
         self.assertEqual(PINNED_RECEIVER_RELEASE, "1.1.2")
         self.assertEqual(COMPANION_VERSIONS["linux"], "1.1.2")

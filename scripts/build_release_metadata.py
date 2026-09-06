@@ -85,7 +85,7 @@ def main() -> int:
     metadata = {
         "schemaVersion": 1,
         "releaseId": f"{tag}+{args.commit}",
-        "pluginVersion": "0.1.1",
+        "pluginVersion": "0.1.2",
         "publishedAt": args.published_at,
         "artifacts": artifacts,
     }

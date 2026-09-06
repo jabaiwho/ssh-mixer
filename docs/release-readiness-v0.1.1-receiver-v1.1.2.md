@@ -1,6 +1,6 @@
-# Plugin 0.1.1 and Receiver 1.1.2 release readiness
+# Plugin 0.1.1 and Receiver 1.1.2 release readiness — historical record
 
-This is the live follow-up record for [tracker #20](https://github.com/jabaiwho/ssh-mixer/issues/20). It records evidence and blockers without granting authority to install a Receiver helper, use signing keys, create or push tags, run attestations, publish, or announce.
+This is the historical pre-publication follow-up record for [tracker #20](https://github.com/jabaiwho/ssh-mixer/issues/20). The approved release outcome was signed plugin `v0.1.1` and immutable Receiver `v1.1.2` at commit `346b4d6248c8ba4de07959e0d8345f720528c81b`, published on 2026-09-01. The [final release record](https://github.com/jabaiwho/ssh-mixer/releases/tag/receiver-v1.1.2) identifies the metadata digest and attestation run. The then-open checkboxes and blockers below are retained as historical preparation evidence, not current release status; see [the release process](releasing.md) for current status. This record does not itself authorize installation, signing, tag pushes, attestations, publication, or announcement.
 
 ## Intended release units
 

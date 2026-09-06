@@ -1,6 +1,6 @@
 """Independent product, Companion, helper, and protocol versions."""
 
-PLUGIN_VERSION = "0.1.1"
+PLUGIN_VERSION = "0.1.2"
 COMPANION_VERSIONS = {
     "linux": "1.1.2",
     "windows": "1.1.2",
